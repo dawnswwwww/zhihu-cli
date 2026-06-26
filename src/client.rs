@@ -18,11 +18,15 @@ impl ZhihuClient {
             .unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
             .trim_end_matches('/')
             .to_string();
-        Ok(Self {
+        Ok(Self::with_secret_and_base_url(secret, base_url))
+    }
+
+    pub fn with_secret_and_base_url(secret: String, base_url: String) -> Self {
+        Self {
             client: Client::new(),
             secret,
             base_url,
-        })
+        }
     }
 
     fn auth_headers(&self) -> reqwest::header::HeaderMap {
@@ -75,5 +79,33 @@ impl ZhihuClient {
             .header("Content-Type", "application/json")
             .json(&body);
         self.send_json(builder).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_constructor_sets_secret_and_base_url() {
+        let client = ZhihuClient::with_secret_and_base_url(
+            "test-secret".into(),
+            "http://localhost:9999".into(),
+        );
+        assert_eq!(client.base_url, "http://localhost:9999");
+        assert_eq!(client.secret, "test-secret");
+    }
+
+    #[test]
+    fn auth_headers_contain_bearer_and_timestamp() {
+        let client = ZhihuClient::with_secret_and_base_url(
+            "test-secret".into(),
+            "http://localhost:9999".into(),
+        );
+        let headers = client.auth_headers();
+        let auth = headers.get("Authorization").unwrap().to_str().unwrap();
+        assert!(auth.starts_with("Bearer "));
+        assert!(auth.contains("test-secret"));
+        assert!(headers.contains_key("X-Request-Timestamp"));
     }
 }

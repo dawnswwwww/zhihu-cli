@@ -109,3 +109,94 @@ impl SearchDb {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_ask_defaults_to_thinking() {
+        let cli = Cli::parse_from(["zhihu", "ask", "hello"]);
+        match cli.command {
+            Command::Ask(args) => {
+                assert_eq!(args.query, "hello");
+                assert!(matches!(args.model, ModelTier::Thinking));
+                assert!(!args.stream);
+            }
+            _ => panic!("expected Ask command"),
+        }
+    }
+
+    #[test]
+    fn parse_ask_with_stream_and_model() {
+        let cli = Cli::parse_from(["zhihu", "ask", "hello", "--stream", "--model", "agent"]);
+        match cli.command {
+            Command::Ask(args) => {
+                assert!(args.stream);
+                assert!(matches!(args.model, ModelTier::Agent));
+            }
+            _ => panic!("expected Ask command"),
+        }
+    }
+
+    #[test]
+    fn parse_search_zhihu_with_count() {
+        let cli = Cli::parse_from(["zhihu", "search", "zhihu", "query", "--count", "5"]);
+        match cli.command {
+            Command::Search {
+                subcommand: SearchCommand::Zhihu { query, count },
+            } => {
+                assert_eq!(query, "query");
+                assert_eq!(count, 5);
+            }
+            _ => panic!("expected search zhihu"),
+        }
+    }
+
+    #[test]
+    fn parse_search_global_with_filter_and_db() {
+        let cli = Cli::parse_from([
+            "zhihu",
+            "search",
+            "global",
+            "query",
+            "--count",
+            "15",
+            "--filter",
+            "host==\"example.com\"",
+            "--db",
+            "realtime",
+        ]);
+        match cli.command {
+            Command::Search {
+                subcommand:
+                    SearchCommand::Global {
+                        query,
+                        count,
+                        filter,
+                        db,
+                    },
+            } => {
+                assert_eq!(query, "query");
+                assert_eq!(count, 15);
+                assert_eq!(filter, Some("host==\"example.com\"".into()));
+                assert!(matches!(db, SearchDb::Realtime));
+            }
+            _ => panic!("expected search global"),
+        }
+    }
+
+    #[test]
+    fn model_tier_api_names() {
+        assert_eq!(ModelTier::Fast.api_name(), "zhida-fast-1p5");
+        assert_eq!(ModelTier::Thinking.api_name(), "zhida-thinking-1p5");
+        assert_eq!(ModelTier::Agent.api_name(), "zhida-agent");
+    }
+
+    #[test]
+    fn search_db_api_names() {
+        assert_eq!(SearchDb::All.api_name(), "all");
+        assert_eq!(SearchDb::Realtime.api_name(), "realtime");
+        assert_eq!(SearchDb::Static.api_name(), "static");
+    }
+}

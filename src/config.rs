@@ -72,6 +72,28 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+    use std::env;
+    use tempfile::TempDir;
+
+    fn with_temp_home<F>(f: F)
+    where
+        F: FnOnce(),
+    {
+        let tmp = TempDir::new().unwrap();
+        let original = env::var("HOME").ok();
+        unsafe {
+            env::set_var("HOME", tmp.path());
+            env::remove_var("ZHIHU_ACCESS_SECRET");
+        }
+        f();
+        unsafe {
+            match original {
+                Some(h) => env::set_var("HOME", h),
+                None => env::remove_var("HOME"),
+            }
+        }
+    }
 
     #[test]
     fn config_serde_roundtrip() {
@@ -88,5 +110,56 @@ mod tests {
         let s = "";
         let config: Config = toml::from_str(s).unwrap();
         assert!(config.access_secret.is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_secret_prefers_env_over_config() {
+        with_temp_home(|| {
+            Config::set_secret("from-config".into()).unwrap();
+            unsafe { env::set_var("ZHIHU_ACCESS_SECRET", "from-env"); }
+            assert_eq!(Config::resolve_secret().unwrap(), "from-env");
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_secret_falls_back_to_config() {
+        with_temp_home(|| {
+            Config::set_secret("from-config".into()).unwrap();
+            assert_eq!(Config::resolve_secret().unwrap(), "from-config");
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_secret_errors_when_missing() {
+        with_temp_home(|| {
+            let err = Config::resolve_secret().unwrap_err();
+            assert!(matches!(err, ZhihuError::MissingSecret));
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn save_creates_config_file() {
+        with_temp_home(|| {
+            Config::set_secret("my-secret".into()).unwrap();
+            let config = Config::load().unwrap();
+            assert_eq!(config.access_secret, Some("my-secret".into()));
+            assert!(Config::config_path().unwrap().exists());
+        });
+    }
+
+    #[test]
+    #[serial]
+    #[cfg(unix)]
+    fn config_file_has_restrictive_permissions() {
+        with_temp_home(|| {
+            Config::set_secret("my-secret".into()).unwrap();
+            let path = Config::config_path().unwrap();
+            let perms = fs::metadata(&path).unwrap().permissions();
+            assert_eq!(perms.mode() & 0o777, 0o600);
+        });
     }
 }
