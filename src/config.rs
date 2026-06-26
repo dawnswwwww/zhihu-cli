@@ -68,3 +68,25 @@ impl Config {
         config.save()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_serde_roundtrip() {
+        let config = Config {
+            access_secret: Some("secret".into()),
+        };
+        let s = toml::to_string(&config).unwrap();
+        let parsed: Config = toml::from_str(&s).unwrap();
+        assert_eq!(parsed.access_secret, Some("secret".into()));
+    }
+
+    #[test]
+    fn empty_config_is_default() {
+        let s = "";
+        let config: Config = toml::from_str(s).unwrap();
+        assert!(config.access_secret.is_none());
+    }
+}
