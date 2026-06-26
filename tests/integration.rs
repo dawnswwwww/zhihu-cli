@@ -5,14 +5,10 @@ fn get_secret() -> Option<String> {
     env::var("ZHIHU_ACCESS_SECRET").ok().filter(|s| !s.trim().is_empty())
 }
 
-fn secret_required() -> String {
-    get_secret().expect("ZHIHU_ACCESS_SECRET must be set for integration tests")
-}
-
 #[tokio::test]
 #[serial]
 async fn search_zhihu_returns_results() {
-    let secret = secret_required();
+    let Some(secret) = get_secret() else { return };
     let client = zhihu_cli::client::ZhihuClient::with_secret_and_base_url(
         secret,
         "https://developer.zhihu.com".into(),
@@ -28,7 +24,7 @@ async fn search_zhihu_returns_results() {
 #[tokio::test]
 #[serial]
 async fn search_global_returns_results() {
-    let secret = secret_required();
+    let Some(secret) = get_secret() else { return };
     let client = zhihu_cli::client::ZhihuClient::with_secret_and_base_url(
         secret,
         "https://developer.zhihu.com".into(),
@@ -47,7 +43,7 @@ async fn search_global_returns_results() {
 #[tokio::test]
 #[serial]
 async fn ask_non_stream_returns_completion() {
-    let secret = secret_required();
+    let Some(secret) = get_secret() else { return };
     let client = zhihu_cli::client::ZhihuClient::with_secret_and_base_url(
         secret,
         "https://developer.zhihu.com".into(),
@@ -67,7 +63,7 @@ async fn ask_non_stream_returns_completion() {
 #[tokio::test]
 #[serial]
 async fn ask_stream_returns_chunks() {
-    let secret = secret_required();
+    let Some(secret) = get_secret() else { return };
     let client = zhihu_cli::client::ZhihuClient::with_secret_and_base_url(
         secret,
         "https://developer.zhihu.com".into(),
