@@ -14,6 +14,6 @@ async fn main() {
     match cli.command {
         Command::Auth { subcommand } => commands::auth::run(subcommand).await,
         Command::Search { subcommand } => commands::search::run(subcommand).await,
-        Command::Ask(_) => {}
+        Command::Ask(args) => commands::ask::run(args).await,
     }
 }
