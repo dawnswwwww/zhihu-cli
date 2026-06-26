@@ -1,6 +1,7 @@
 use crate::error::{Result, ZhihuError};
 use serde::{Deserialize, Serialize};
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
