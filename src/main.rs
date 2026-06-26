@@ -13,7 +13,7 @@ async fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Auth { subcommand } => commands::auth::run(subcommand).await,
-        Command::Search { .. } => {}
+        Command::Search { subcommand } => commands::search::run(subcommand).await,
         Command::Ask(_) => {}
     }
 }
