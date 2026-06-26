@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::env;
 use tempfile::TempDir;
 
 fn with_temp_home<F>(f: F)
@@ -7,6 +8,8 @@ where
     F: FnOnce(&TempDir),
 {
     let tmp = TempDir::new().unwrap();
+    // Ensure tests don't inherit a real access secret from the environment.
+    unsafe { env::remove_var("ZHIHU_ACCESS_SECRET"); }
     f(&tmp);
 }
 
