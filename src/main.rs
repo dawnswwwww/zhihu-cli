@@ -1,8 +1,14 @@
+mod cli;
 mod client;
 mod config;
 mod error;
 mod output;
 
-fn main() {
-    println!("Hello, world!");
+use clap::Parser;
+use cli::Cli;
+
+#[tokio::main]
+async fn main() {
+    let cli = Cli::parse();
+    println!("{:?}", cli.command);
 }
