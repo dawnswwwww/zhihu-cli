@@ -5,8 +5,13 @@ use crate::output::{print_error, print_json, print_json_line};
 use serde_json::{json, Value};
 
 pub async fn run(args: AskArgs) {
+    let stream = args.stream;
     match handle(args).await {
-        Ok(value) => print_json(&value),
+        Ok(value) => {
+            if !stream {
+                print_json(&value);
+            }
+        }
         Err(e) => print_error(&e),
     }
 }

@@ -1,4 +1,4 @@
-use crate::cli::{SearchCommand, SearchDb};
+use crate::cli::SearchCommand;
 use crate::client::ZhihuClient;
 use crate::error::Result;
 use crate::output::{print_error, print_json};

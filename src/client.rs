@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::error::{Result, ZhihuError};
-use reqwest::{Client, Method, RequestBuilder, StatusCode};
+use reqwest::{Client, Method, RequestBuilder};
 use serde_json::Value;
 
 pub const DEFAULT_BASE_URL: &str = "https://developer.zhihu.com";
@@ -75,9 +75,5 @@ impl ZhihuClient {
             .header("Content-Type", "application/json")
             .json(&body);
         self.send_json(builder).await
-    }
-
-    pub fn base_url(&self) -> &str {
-        &self.base_url
     }
 }

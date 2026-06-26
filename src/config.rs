@@ -12,8 +12,8 @@ pub struct Config {
 
 impl Config {
     pub fn config_dir() -> Result<PathBuf> {
-        dirs::config_dir()
-            .map(|d| d.join("zhihu-cli"))
+        dirs::home_dir()
+            .map(|d| d.join(".zhihu-cli"))
             .ok_or(ZhihuError::ConfigDirNotFound)
     }
 
