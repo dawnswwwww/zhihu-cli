@@ -11,7 +11,7 @@ pub async fn run(args: HotArgs) {
 }
 
 /// Dispatch a command's `Result` to the appropriate output. See the
-/// matching helper in `commands::search` for the rationale.
+/// matching helper in `commands::auth` for the rationale.
 pub(crate) fn dispatch_result<T: Serialize>(result: Result<T>) -> Result<()> {
     match result {
         Ok(value) => print_json(&value),
