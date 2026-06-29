@@ -98,3 +98,26 @@ async fn ask_stream_returns_chunks() {
     }
     assert!(saw_data, "should have received at least one data chunk");
 }
+
+#[tokio::test]
+#[serial]
+async fn hot_list_returns_results() {
+    let Some(secret) = get_secret() else { return };
+    let client = zhihu_cli::client::ZhihuClient::with_secret_and_base_url(
+        secret,
+        "https://developer.zhihu.com".into(),
+    );
+    let resp = client
+        .get("/api/v1/content/hot_list", &[("Limit", "3")])
+        .await
+        .expect("hot list should succeed");
+    assert_eq!(resp.get("Code"), Some(&serde_json::json!(0)));
+    let data = resp.get("Data").expect("Data should exist");
+    let total = data.get("Total").and_then(|v| v.as_i64()).unwrap_or(0);
+    let items_len = data
+        .get("Items")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.len())
+        .unwrap_or(0);
+    assert_eq!(total as usize, items_len);
+}
