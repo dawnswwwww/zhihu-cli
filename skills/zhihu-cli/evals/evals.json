@@ -72,6 +72,30 @@
           "text": "The response recommends using `zhihu search zhihu` for Zhihu-only content"
         }
       ]
+    },
+    {
+      "id": 3,
+      "prompt": "我想看看现在知乎热榜前十有哪些内容，应该用哪个命令？",
+      "expected_output": "应该给出 `zhihu hot --limit 10` 命令，并说明输出是 PascalCase 字段的 JSON（Code, Message, Data.Total, Data.Items 等），Items 里包含 Title、Url、ThumbnailUrl、Summary。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "correct_command",
+          "text": "The response includes the exact command `zhihu hot --limit 10`"
+        },
+        {
+          "name": "mentions_json_output",
+          "text": "The response states that the output is JSON"
+        },
+        {
+          "name": "mentions_items_array",
+          "text": "The response describes the results as being under Data.Items (or Items), not a direct Data array"
+        },
+        {
+          "name": "mentions_limit_flag",
+          "text": "The response mentions the --limit flag and its default/max behavior"
+        }
+      ]
     }
   ]
 }

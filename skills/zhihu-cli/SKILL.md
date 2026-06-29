@@ -1,6 +1,6 @@
 ---
 name: zhihu-cli
-description: Use this skill whenever the user wants to interact with the Zhihu Open Platform through the `zhihu` command-line tool. This includes searching Zhihu content, performing global web search via Zhihu, using the Zhida chat/completion API, configuring credentials, or understanding CLI output. Use it even if the user only says "zhihu", "search zhihu", "zhida", "知乎", or mentions the project `zhihu-cli`.
+description: Use this skill whenever the user wants to interact with the Zhihu Open Platform through the `zhihu` command-line tool. This includes searching Zhihu content, performing global web search via Zhihu, using the Zhida chat/completion API, checking the Zhihu hot list, configuring credentials, or understanding CLI output. Use it even if the user only says "zhihu", "search zhihu", "zhida", "知乎", "热榜", "hot list", or mentions the project `zhihu-cli`.
 ---
 
 # zhihu-cli Skill
@@ -130,6 +130,20 @@ Example:
 zhihu search global "人工智能" --count 5 --filter 'host=="example.com"' --db all
 ```
 
+### Zhihu hot list (热榜)
+
+```bash
+zhihu hot [--limit N]
+```
+
+- `--limit`: number of results, default 30, max 30; the CLI clamps out-of-range values to [1, 30]
+
+Example:
+
+```bash
+zhihu hot --limit 10
+```
+
 ### Zhida chat/completion (直答)
 
 ```bash
@@ -153,7 +167,7 @@ zhihu ask "什么是 RAG？" --model thinking
 
 ### Success
 
-Search commands return the API's raw JSON response (PascalCase fields):
+Search and hot-list commands return the API's raw JSON response (PascalCase fields):
 
 ```json
 {
@@ -163,6 +177,26 @@ Search commands return the API's raw JSON response (PascalCase fields):
     "HasMore": false,
     "SearchHashId": "...",
     "Items": [...]
+  }
+}
+```
+
+`zhihu hot` returns a hot-list shaped response:
+
+```json
+{
+  "Code": 0,
+  "Message": "success",
+  "Data": {
+    "Total": 10,
+    "Items": [
+      {
+        "Title": "如何评价某个热点问题？",
+        "Url": "https://www.zhihu.com/question/123456789",
+        "ThumbnailUrl": "...",
+        "Summary": "..."
+      }
+    ]
   }
 }
 ```
@@ -225,10 +259,12 @@ Common error codes:
 
 1. Always check `ZHIHU_ACCESS_SECRET` is set before calling non-auth commands.
 2. For search, default `--count` is usually enough; use `--count` only when the user asks for more results.
-3. For `zhihu ask`, default to `--model thinking` unless the user asks for a quick answer (`fast`) or a complex multi-step task (`agent`).
-4. Do not use `global` search with `host=="zhihu.com"`; use `zhihu search zhihu` instead.
-5. Parse output as JSON; on non-zero exit code, show the `error` field to the user.
-6. When the user asks a general knowledge question in Chinese, consider using `zhihu ask` or `zhihu search zhihu` to get Zhihu-style answers.
+3. For `zhihu hot`, default `--limit` (30) is usually enough; use a smaller value only when the user asks for fewer items.
+4. For `zhihu ask`, default to `--model thinking` unless the user asks for a quick answer (`fast`) or a complex multi-step task (`agent`).
+5. Do not use `global` search with `host=="zhihu.com"`; use `zhihu search zhihu` instead.
+6. Parse output as JSON; on non-zero exit code, show the `error` field to the user.
+7. When the user asks a general knowledge question in Chinese, consider using `zhihu ask` or `zhihu search zhihu` to get Zhihu-style answers.
+8. When the user asks about current trending topics on Zhihu, use `zhihu hot`.
 
 ## Examples
 
@@ -242,6 +278,12 @@ Global search with filter:
 
 ```bash
 zhihu search global "ChatGPT" --count 10 --filter 'host=="openai.com"' --db realtime
+```
+
+Check Zhihu hot list:
+
+```bash
+zhihu hot --limit 10
 ```
 
 Ask Zhida:

@@ -34,7 +34,79 @@
 
 ---
 
-## 2. 知乎搜索（站内搜索）
+## 2. 知乎热榜（hot_list）
+
+### 2.1 API：`hot_list`
+
+| 项目 | 值 |
+|------|-----|
+| URL | `GET https://developer.zhihu.com/api/v1/content/hot_list` |
+| 说明 | 获取当前知乎热榜内容，返回问题/文章列表 |
+
+#### 请求参数
+
+| Header | 示例值 | 说明 |
+|--------|--------|------|
+| `Authorization` | `Bearer <your_access_secret>` | Access Secret |
+| `X-Request-Timestamp` | `1742822400` | 秒级 Unix 时间戳 |
+
+| Query 参数 | 类型 | 必填 | 说明 |
+|------------|------|------|------|
+| `Limit` | Int32 | 否 | 默认 30，最大 30；超出范围时服务端回退为 30 |
+
+#### 响应字段
+
+| Data 字段 | 类型 | 说明 |
+|-----------|------|------|
+| `Total` | Int64 | 实际返回的热榜条数 |
+| `Items` | Array[Item] | 热榜内容列表 |
+
+Item 字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `Title` | String | 热榜标题 |
+| `Url` | String | 对应的知乎链接 |
+| `ThumbnailUrl` | String | 缩略图 URL，无封面时为空字符串 |
+| `Summary` | String | 内容摘要，无摘要时为空字符串 |
+
+#### 响应示例
+
+```json
+{
+  "Code": 0,
+  "Message": "success",
+  "Data": {
+    "Total": 2,
+    "Items": [
+      {
+        "Title": "如何评价某个热点问题？",
+        "Url": "https://www.zhihu.com/question/123456789",
+        "ThumbnailUrl": "https://pic1.zhimg.com/...jpg",
+        "Summary": "这是该问题的内容摘要"
+      },
+      {
+        "Title": "一篇正在热榜上的文章标题",
+        "Url": "https://zhuanlan.zhihu.com/p/987654321",
+        "ThumbnailUrl": "",
+        "Summary": ""
+      }
+    ]
+  }
+}
+```
+
+### 2.2 CLI 用法
+
+```bash
+zhihu hot [--limit N]
+```
+
+- `--limit` 默认 30，CLI 会将其限制在 `[1, 30]`。
+
+---
+
+## 3. 知乎搜索（站内搜索）
 
 ### 2.1 API：`zhihu_search`
 
@@ -88,9 +160,9 @@ Item 字段：
 
 ---
 
-## 3. 全网搜索
+## 4. 全网搜索
 
-### 3.1 API：`global_search`
+### 4.1 API：`global_search`
 
 | 项目 | 值 |
 |------|-----|
@@ -129,7 +201,7 @@ host=="example.com" AND publish_time>=1778494631
 - `AuthorityLevel` 含义：`1` 低权威、`2` 中权威、`3` 高权威、`4` 超高权威。
 - `ContentText` 中高亮部分使用 `<em>` 标签。
 
-### 3.2 Skill：`global_search_skill`
+### 4.2 Skill：`global_search_skill`
 
 | 项目 | 值 |
 |------|-----|
@@ -139,9 +211,9 @@ host=="example.com" AND publish_time>=1778494631
 
 ---
 
-## 4. 直答（对话 / 生成）
+## 5. 直答（对话 / 生成）
 
-### 4.1 API：`zhida`
+### 5.1 API：`zhida`
 
 | 项目 | 值 |
 |------|-----|
@@ -190,7 +262,7 @@ Message：
 
 SSE 格式，每条以 `data: ` 开头，结束为 `data: [DONE]`；中间可能夹杂心跳注释 `: keep-alive`。
 
-### 4.2 Skill：`zhida_skill`
+### 5.2 Skill：`zhida_skill`
 
 | 项目 | 值 |
 |------|-----|
@@ -201,18 +273,19 @@ SSE 格式，每条以 `data: ` 开头，结束为 `data: [DONE]`；中间可能
 
 ---
 
-## 5. CLI 设计初步建议
+## 6. CLI 设计初步建议
 
-### 5.1 命令分层
+### 6.1 命令分层
 
 ```text
 zhihu auth login --secret <ACCESS_SECRET>     # 保存 secret 并自动生成时间戳
 zhihu search zhihu <QUERY> [--count N]
 zhihu search global <QUERY> [--count N] [--filter ...] [--db all|realtime|static]
+zhihu hot [--limit N]
 zhihu ask <QUERY> [--model fast|thinking|agent] [--stream]
 ```
 
-### 5.2 需要提前确认的设计点
+### 6.2 需要提前确认的设计点
 
 1. **鉴权配置存储**：Access Secret 是写入本地配置文件（如 `~/.zhihu-cli/config.toml`），还是每次通过环境变量 `ZHIHU_ACCESS_SECRET` 传入？
 2. **输出格式**：默认输出可读表格，还是 JSON？是否提供 `--json` / `--table` 开关？
@@ -220,7 +293,7 @@ zhihu ask <QUERY> [--model fast|thinking|agent] [--stream]
 4. **流式输出**：`zhida` 流式响应如何与终端交互（是否逐字打印、是否支持 `--no-stream` 聚合）？
 5. **Skill 包支持**：CLI 是否只需调用 HTTP API，还是也要能下载 / 执行本地 Skill zip？
 
-### 5.3 实现注意事项
+### 6.3 实现注意事项
 
 - 每个请求必须带 `X-Request-Timestamp`，建议用当前 Unix 秒级时间戳自动生成。
 - `global_search` 的 `Filter` 需要 URL 编码，CLI 应提供参数封装避免用户手写表达式。
