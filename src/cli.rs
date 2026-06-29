@@ -21,6 +21,8 @@ pub enum Command {
     },
     /// Ask Zhida
     Ask(AskArgs),
+    /// Show Zhihu hot list
+    Hot(HotArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -33,6 +35,13 @@ pub struct AskArgs {
     /// Stream output
     #[arg(long)]
     pub stream: bool,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct HotArgs {
+    /// Number of results to return
+    #[arg(long, default_value = "30")]
+    pub limit: i32,
 }
 
 #[derive(Debug, Subcommand)]
@@ -198,5 +207,27 @@ mod tests {
         assert_eq!(SearchDb::All.api_name(), "all");
         assert_eq!(SearchDb::Realtime.api_name(), "realtime");
         assert_eq!(SearchDb::Static.api_name(), "static");
+    }
+
+    #[test]
+    fn parse_hot_defaults_to_limit_thirty() {
+        let cli = Cli::parse_from(["zhihu", "hot"]);
+        match cli.command {
+            Command::Hot(args) => {
+                assert_eq!(args.limit, 30);
+            }
+            _ => panic!("expected Hot command"),
+        }
+    }
+
+    #[test]
+    fn parse_hot_with_limit() {
+        let cli = Cli::parse_from(["zhihu", "hot", "--limit", "10"]);
+        match cli.command {
+            Command::Hot(args) => {
+                assert_eq!(args.limit, 10);
+            }
+            _ => panic!("expected Hot command"),
+        }
     }
 }
