@@ -10,6 +10,8 @@ pub async fn run(args: HotArgs) {
     }
 }
 
+/// Dispatch a command's `Result` to the appropriate output. See the
+/// matching helper in `commands::search` for the rationale.
 pub(crate) fn dispatch_result<T: Serialize>(result: Result<T>) -> Result<()> {
     match result {
         Ok(value) => print_json(&value),
@@ -21,18 +23,26 @@ async fn handle(args: HotArgs) -> Result<serde_json::Value> {
     handle_with_client(args, &ZhihuClient::new()?).await
 }
 
+/// Testable inner core: takes the client as a parameter so unit tests can
+/// pass a mock. Public within the crate for tests.
 pub(crate) async fn handle_with_client(args: HotArgs, client: &ZhihuClient) -> Result<serde_json::Value> {
     let req = build_request(&args);
     let query_refs: Vec<(&str, &str)> = req.query.iter().map(|(k, v)| (*k, v.as_str())).collect();
     client.get(req.path, &query_refs).await
 }
 
+/// The fully-prepared request for the hot list command: HTTP path plus the
+/// already-validated query parameters. Owned (not borrowed) so the result
+/// can outlive the borrowed `HotArgs`.
 #[derive(Debug, PartialEq)]
 pub(crate) struct HotRequest {
     pub path: &'static str,
     pub query: Vec<(&'static str, String)>,
 }
 
+/// Validate inputs and assemble the (path, query) for the hot list command.
+///
+/// `limit` is clamped to `[1, 30]` to match the Zhihu OpenAPI limit.
 pub(crate) fn build_request(args: &HotArgs) -> HotRequest {
     HotRequest {
         path: "/api/v1/content/hot_list",
@@ -42,6 +52,9 @@ pub(crate) fn build_request(args: &HotArgs) -> HotRequest {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for `build_request` — the pure parameter-assembly layer
+    //! of the hot list command. The HTTP layer is exercised by `mocked_api.rs`.
+
     use super::build_request;
     use crate::cli::HotArgs;
     use crate::error::{Result, ZhihuError};
