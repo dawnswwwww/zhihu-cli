@@ -79,35 +79,41 @@ The aspiration is **100%** — see "Gap to 100%" below for what's missing.
 | `src/client.rs` | **100%** | ✅ done |
 | `src/main.rs` | **100%** | ✅ done |
 | `src/commands/search.rs` | **100%** | ✅ done |
+| `src/commands/ask.rs` | 99.65% | 🟡 `run` error path / closing brace artifact |
 | `src/commands/auth.rs` | 96.43% | 🟡 test artifacts only |
-| `src/commands/ask.rs` | 97.79% | 🟡 test artifacts only |
 | `src/config.rs` | 97.83% | 🟡 closing-brace artifacts |
-| `src/cli.rs` | 94.37% | 🟡 test panic arms |
+| `src/cli.rs` | 92.94% | 🟡 test panic arms |
 | `src/output.rs` | 92.73% | 🟡 test artifacts only |
-| **TOTAL** | **97.62%** | ✅ passes 80% gate |
+| `src/commands/hot.rs` | **100%** | ✅ done |
+| **TOTAL** | **98.08%** | ✅ passes 80% gate |
 
 **Function coverage: 100%** (every public function is called by at least one test).
 
-## The final 2.38% — irreducible coverage artifacts
+## The final ~2% — irreducible coverage artifacts
 
-28 lines remain uncovered. They break down into two categories:
+25 lines remain uncovered. They break down into two categories:
 
 ### Category A: `_ => panic!("expected …")` arms in test matches (cli.rs)
 
-Lines `126, 138, 152, 185`. These are unreachable when tests pass; they're
+Lines `135, 147, 161, 194, 219, 230`. These are unreachable when tests pass; they're
 the failure-mode of `match cli.command { Command::Ask(args) => … _ => panic!(…) }`.
 Coverage tools count them as uncovered because the test never takes that
 arm in the passing case. There is no idiomatic Rust way to express
 "this match arm is only reached if the test is broken" — they're an
 honest cost of `match`-based CLI parsing tests.
 
-### Category B: closing `}` of test functions and `if let` blocks
+### Category B: closing `}` of test functions and `if let` blocks, plus `run` error paths
 
 Lines in `commands/{auth,ask}.rs`, `config.rs`, `output.rs`. The closing
 brace of a function or block is reported as its own line by `cargo-llvm-cov`
 even though it has no executable code. They appear as uncovered when
 the surrounding block is entered but no further code lives after the
 last statement (e.g., a test that ends after a single `assert!`).
+
+The `run` functions in `commands/{ask,search,auth,hot}.rs` call `print_error`,
+which invokes `process::exit(1)` and never returns. The line after the
+`print_error` call (typically the closing `}`) is therefore unreachable
+in unit tests and counted as uncovered.
 
 These are **not real gaps** — they don't represent untested logic.
 Resolving them would require restructuring tests for cosmetic coverage
