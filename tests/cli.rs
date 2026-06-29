@@ -25,6 +25,7 @@ fn help_shows_commands() {
         .success()
         .stdout(predicate::str::contains("auth"))
         .stdout(predicate::str::contains("search"))
+        .stdout(predicate::str::contains("ask"))
         .stdout(predicate::str::contains("hot"));
 }
 
