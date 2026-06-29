@@ -479,4 +479,32 @@ mod run_tests {
         let result = super::stream_ask_with_client(&client, body).await.unwrap();
         assert_eq!(result["status"], "stream_complete");
     }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn stream_ask_with_client_returns_api_error_on_non_2xx() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(ResponseTemplate::new(503).set_body_string("overloaded"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = ZhihuClient::with_secret_and_base_url("fake".into(), server.uri());
+        let body = json!({
+            "model": "zhida-fast-1p5",
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": true,
+        });
+        let err = super::stream_ask_with_client(&client, body)
+            .await
+            .expect_err("non-2xx should fail");
+        assert!(
+            matches!(err, ZhihuError::Api { status, body } if status == 503 && body == "overloaded")
+        );
+    }
 }
