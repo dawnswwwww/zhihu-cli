@@ -79,13 +79,14 @@ The aspiration is **100%** — see "Gap to 100%" below for what's missing.
 | `src/client.rs` | **100%** | ✅ done |
 | `src/main.rs` | **100%** | ✅ done |
 | `src/commands/search.rs` | **100%** | ✅ done |
-| `src/commands/ask.rs` | 99.65% | 🟡 `run` error path / closing brace artifact |
-| `src/commands/auth.rs` | 96.43% | 🟡 test artifacts only |
+| `src/commands/ask.rs` | 99.66% | 🟡 `run` error path / closing brace artifact |
+| `src/commands/auth.rs` | 95.91% | 🟡 test artifacts only |
+| `src/output.rs` | 93.80% | 🟡 `print_error` exit path / test artifacts |
 | `src/config.rs` | 97.83% | 🟡 closing-brace artifacts |
 | `src/cli.rs` | 92.94% | 🟡 test panic arms |
-| `src/output.rs` | 92.73% | 🟡 test artifacts only |
 | `src/commands/hot.rs` | **100%** | ✅ done |
-| **TOTAL** | **98.08%** | ✅ passes 80% gate |
+| `src/commands/search.rs` | **100%** | ✅ done |
+| **TOTAL** | **98.07%** | ✅ passes 80% gate |
 
 **Function coverage: 100%** (every public function is called by at least one test).
 
