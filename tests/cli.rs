@@ -74,6 +74,20 @@ fn search_zhihu_without_auth_fails() {
 }
 
 #[test]
+fn hot_without_auth_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env_remove("ZHIHU_ACCESS_SECRET");
+        cmd.arg("hot");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("\"code\":20001"))
+            .stderr(predicate::str::contains("Missing access secret"));
+    });
+}
+
+#[test]
 fn env_secret_overrides_config() {
     with_temp_home(|tmp| {
         let mut cmd = Command::cargo_bin("zhihu").unwrap();
@@ -168,4 +182,27 @@ async fn cli_ask_stream_against_mock_server_completes() {
     cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
     cmd.arg("ask").arg("hello").arg("--stream");
     cmd.assert().success();
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_hot_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/content/hot_list"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0,
+            "Message": "ok",
+            "Data": { "Total": 0, "Items": [] },
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("hot").arg("--limit").arg("5");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"Code\": 0"));
 }
