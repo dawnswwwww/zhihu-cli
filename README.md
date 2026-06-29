@@ -91,8 +91,8 @@ See [docs/development.md](docs/development.md) for the full workflow.
 Pushing a SemVer tag triggers the release workflow:
 
 ```bash
-git tag -a v0.1.1 -m "Release 0.1.1"
-git push origin v0.1.1
+git tag -a v0.1.2 -m "Release 0.1.2"
+git push origin v0.1.2
 ```
 
 This builds cross-platform binaries, creates a GitHub Release, publishes `zhihu-cli` to npm, and updates the Homebrew tap.
