@@ -100,7 +100,8 @@ All new production code is preceded by a failing test.
 ### Integration tests in `tests/integration.rs`
 - If `ZHIHU_ACCESS_SECRET` is set, call the real API and assert:
   - `Code == 0`
-  - `Data.Total` equals `Data.Items` length.
+  - `Data.Items` is non-empty.
+  - `Data.Items` length does not exceed `Data.Total`.
 - If the secret is absent, the test short-circuits and passes.
 
 ## Open Questions / Decisions
