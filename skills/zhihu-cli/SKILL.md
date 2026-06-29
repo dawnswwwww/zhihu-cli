@@ -1,14 +1,6 @@
 ---
 name: zhihu-cli
-description: |
-  Use this skill whenever the user wants to interact with the Zhihu Open Platform through the `zhihu` CLI.
-  This includes searching Zhihu content, performing global web search via Zhihu, using the Zhida chat/completion API,
-  configuring credentials, or understanding CLI output. Use it even if the user only says "zhihu", "search zhihu",
-  "zhida", "知乎", or mentions the project `zhihu-cli`.
-version: 0.1.0
-homepage: https://github.com/zhihu-cli/zhihu-cli
-metadata:
-  tags: [zhihu, search, cli, agent-tool]
+description: Use this skill whenever the user wants to interact with the Zhihu Open Platform through the `zhihu` command-line tool. This includes searching Zhihu content, performing global web search via Zhihu, using the Zhida chat/completion API, configuring credentials, or understanding CLI output. Use it even if the user only says "zhihu", "search zhihu", "zhida", "知乎", or mentions the project `zhihu-cli`.
 ---
 
 # zhihu-cli Skill
@@ -21,6 +13,29 @@ This skill tells you how to use the `zhihu` command-line tool to call the Zhihu 
 - Default output: raw JSON on stdout, suitable for piping to `jq` or other tools.
 - Error output: JSON object on stdout, process exits with non-zero code.
 - Authentication: `ZHIHU_ACCESS_SECRET` environment variable, or `~/.zhihu-cli/config.toml`.
+- Repository: https://github.com/dawnswwwww/zhihu-cli
+
+## Installation
+
+In agent environments, install from npm:
+
+```bash
+npm install -g @dawnswwwww/zhihu-cli
+```
+
+Other options:
+
+```bash
+# Homebrew
+brew tap dawnswwwww/tap
+brew install zhihu-cli
+
+# crates.io
+cargo install zhihu-cli
+
+# GitHub Releases (prebuilt binary)
+# Download from https://github.com/dawnswwwww/zhihu-cli/releases
+```
 
 ## Authentication
 
@@ -31,6 +46,8 @@ The CLI needs a Zhihu Open Platform Access Secret.
 ```bash
 export ZHIHU_ACCESS_SECRET="<your-secret>"
 ```
+
+The environment variable takes precedence over the config file.
 
 ### Option 2: config file
 
@@ -44,10 +61,29 @@ This writes `~/.zhihu-cli/config.toml`:
 access_secret = "<your-secret>"
 ```
 
+On Unix the file is created with `0o600` permissions.
+
+### Option 3: interactive login
+
+```bash
+zhihu auth login
+```
+
+Then paste the secret when prompted.
+
 ### Check status
 
 ```bash
 zhihu auth status
+```
+
+Returns JSON like:
+
+```json
+{
+  "configured": true,
+  "source": "env"
+}
 ```
 
 ## Commands
@@ -59,7 +95,7 @@ zhihu search zhihu "QUERY" [--count N]
 ```
 
 - `QUERY`: search keywords (required)
-- `--count`: number of results, default 10, max 10
+- `--count`: number of results, default 10, max 10; the CLI clamps out-of-range values to [1, 10]
 
 Example:
 
@@ -74,9 +110,9 @@ zhihu search global "QUERY" [--count N] [--filter FILTER] [--db all|realtime|sta
 ```
 
 - `QUERY`: search keywords (required)
-- `--count`: number of results, default 10, max 20
-- `--filter`: advanced filter expression; must be URL-encoded by the CLI automatically
-- `--db`: index database choice
+- `--count`: number of results, default 10, max 20; the CLI clamps out-of-range values to [1, 20]
+- `--filter`: advanced filter expression; the CLI passes it through, so quote it correctly in the shell
+- `--db`: index database choice: `all` (default), `realtime`, `static`
 
 Filter syntax examples:
 
@@ -86,7 +122,7 @@ host=="example.com" AND publish_time>=1778494631
 (host=="example.com" OR host=="news.example.com") AND publish_time>1778494631
 ```
 
-Note: `host=="zhihu.com"` is not supported; for Zhihu-only content use `zhihu search zhihu`.
+Important: `host=="zhihu.com"` is not supported in global search; for Zhihu-only content use `zhihu search zhihu`.
 
 Example:
 
@@ -103,7 +139,7 @@ zhihu ask "QUERY" [--model fast|thinking|agent] [--stream]
 - `QUERY`: user message (required); sent as `messages=[{"role":"user","content":"QUERY"}]`
 - `--model`: one of
   - `fast` → `zhida-fast-1p5`
-  - `thinking` → `zhida-thinking-1p5`
+  - `thinking` → `zhida-thinking-1p5` (default)
   - `agent` → `zhida-agent`
 - `--stream`: enable streaming output (default off)
 
@@ -131,7 +167,26 @@ Search commands return the API's raw JSON response (PascalCase fields):
 }
 ```
 
-`zhihu ask` without `--stream` returns the OpenAI-style chat completion JSON.
+`zhihu ask` without `--stream` returns the OpenAI-style chat completion JSON:
+
+```json
+{
+  "id": "chatcmpl-xxxx",
+  "object": "chat.completion",
+  "model": "zhida-thinking-1p5",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "reasoning_content": "...",
+        "content": "..."
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}
+```
 
 ### Streaming
 
@@ -173,6 +228,7 @@ Common error codes:
 3. For `zhihu ask`, default to `--model thinking` unless the user asks for a quick answer (`fast`) or a complex multi-step task (`agent`).
 4. Do not use `global` search with `host=="zhihu.com"`; use `zhihu search zhihu` instead.
 5. Parse output as JSON; on non-zero exit code, show the `error` field to the user.
+6. When the user asks a general knowledge question in Chinese, consider using `zhihu ask` or `zhihu search zhihu` to get Zhihu-style answers.
 
 ## Examples
 
@@ -193,3 +249,7 @@ Ask Zhida:
 ```bash
 zhihu ask "总结 RAG 的核心思路" --model agent
 ```
+
+## References
+
+For full API endpoint and field details, read `references/api-reference.md` bundled with this skill.

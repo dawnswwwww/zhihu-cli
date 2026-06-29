@@ -49,6 +49,22 @@ zhihu search global "Rust 入门" --count 5
 zhihu ask "Rust 和 Go 怎么选？" --model thinking
 ```
 
+## Claude Skill
+
+This repository includes a Claude skill to help you use `zhihu-cli` from Claude Code or Claude.ai.
+
+Install it with the [Skills CLI](https://skills.sh/):
+
+```bash
+# Install from GitHub
+npx skills add dawnswwwww/zhihu-cli
+
+# Or install globally
+npx skills add dawnswwwww/zhihu-cli -g
+```
+
+Once installed, Claude will automatically use the skill whenever you ask about searching Zhihu, using the Zhida API, or configuring `zhihu-cli`.
+
 ## Commands
 
 | Command | Description |

@@ -1,0 +1,77 @@
+{
+  "skill_name": "zhihu-cli",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "我想在知乎上搜索关于 Rust 入门的优质回答，返回 5 条结果。请告诉我应该用什么命令，以及命令会返回什么格式的数据。",
+      "expected_output": "应该给出 `zhihu search zhihu \"Rust 入门\" --count 5` 命令，并说明输出是 PascalCase 字段的 JSON（Code, Message, Data.Items 等）。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "correct_command",
+          "text": "The response includes the exact command `zhihu search zhihu \"Rust 入门\" --count 5`"
+        },
+        {
+          "name": "mentions_json_output",
+          "text": "The response states that the output is JSON"
+        },
+        {
+          "name": "mentions_items_array",
+          "text": "The response describes the results as being under Data.Items (or Items), not a direct Data array"
+        },
+        {
+          "name": "mentions_code_field",
+          "text": "The response mentions the Code field (PascalCase success indicator)"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "我已经拿到了知乎开放平台的 Access Secret，想配置 zhihu-cli 然后用直答的 thinking 模型问一问：什么是 RAG？请给出完整步骤和命令。",
+      "expected_output": "应该说明环境变量 `ZHIHU_ACCESS_SECRET` 或 `zhihu auth set-secret` 配置方式，然后给出 `zhihu ask \"什么是 RAG？\" --model thinking` 命令，并解释默认模型就是 thinking。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "correct_ask_command",
+          "text": "The response includes `zhihu ask \"什么是 RAG？\" --model thinking`"
+        },
+        {
+          "name": "mentions_auth_method",
+          "text": "The response mentions at least one authentication method (env var or zhihu auth set-secret)"
+        },
+        {
+          "name": "mentions_env_precedence",
+          "text": "The response notes that ZHIHU_ACCESS_SECRET env var takes precedence over config file"
+        },
+        {
+          "name": "correct_config_path",
+          "text": "The response gives the config file path as ~/.zhihu-cli/config.toml"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "zhihu search global 的 --filter 参数怎么用？我想用它搜索 zhihu.com 上的内容可以吗？",
+      "expected_output": "应该解释 filter 语法（host==, publish_time, AND/OR），并明确指出 `host==\"zhihu.com\"` 不支持，应该用 `zhihu search zhihu` 搜知乎内容。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "mentions_host_syntax",
+          "text": "The response explains the host==\"...\" filter syntax"
+        },
+        {
+          "name": "mentions_combinators",
+          "text": "The response mentions publish_time or AND/OR combinators"
+        },
+        {
+          "name": "zhihu_com_not_supported",
+          "text": "The response clearly states that host==\"zhihu.com\" is not supported in global search"
+        },
+        {
+          "name": "recommends_zhihu_search",
+          "text": "The response recommends using `zhihu search zhihu` for Zhihu-only content"
+        }
+      ]
+    }
+  ]
+}
