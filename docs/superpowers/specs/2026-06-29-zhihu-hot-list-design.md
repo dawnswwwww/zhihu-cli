@@ -85,7 +85,7 @@ All new production code is preceded by a failing test.
 ### Unit tests in `src/cli.rs`
 - Parse `zhihu hot` and assert default `--limit` is 30.
 - Parse `zhihu hot --limit 10` and assert the value is captured.
-- Parse `zhihu hot --limit 0` and assert it clamps to 1 (matching the project's existing `[1, max]` clamp behavior).
+- Parse `zhihu hot --limit 0` and assert it clamps to 1. Note: while the API itself reverts `Limit <= 0` to 30, the CLI follows the project's existing `[1, max]` clamp convention for count-like parameters.
 
 ### Unit tests in `src/commands/hot.rs`
 - `build_request` returns path `/api/v1/content/hot_list`.
