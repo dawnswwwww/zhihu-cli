@@ -126,3 +126,39 @@ async fn request_includes_auth_headers() {
     clear_base_url();
     assert!(resp.is_ok());
 }
+
+#[tokio::test]
+#[serial]
+async fn post_sends_json_body_and_returns_response() {
+    use serde_json::json;
+
+    let server = MockServer::start().await;
+    set_base_url(&server.uri());
+
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(wiremock::matchers::header("Content-Type", "application/json"))
+        .and(wiremock::matchers::header_exists("Authorization"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "chatcmpl-1",
+            "choices": [{"message": {"role": "assistant", "content": "hi"}}],
+        })))
+        .mount(&server)
+        .await;
+
+    let client = ZhihuClient::with_secret_and_base_url("fake".into(), server.uri());
+    let resp = client
+        .post(
+            "/v1/chat/completions",
+            json!({
+                "model": "zhida-fast-1p5",
+                "messages": [{"role": "user", "content": "hello"}],
+                "stream": false,
+            }),
+        )
+        .await
+        .expect("POST should succeed");
+
+    clear_base_url();
+    assert_eq!(resp["choices"][0]["message"]["content"], "hi");
+}

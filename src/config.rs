@@ -69,6 +69,20 @@ impl Config {
     }
 }
 
+/// Restore `HOME` to its prior value. Extracted from `with_temp_home` so the
+/// `None => remove_var` branch is unit-testable in isolation. `#[cfg(test)]`
+/// because it is only used by test helpers.
+#[cfg(test)]
+pub(crate) fn restore_home(original: Option<String>) {
+    use std::env;
+    unsafe {
+        match original {
+            Some(h) => env::set_var("HOME", h),
+            None => env::remove_var("HOME"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,12 +101,7 @@ mod tests {
             env::remove_var("ZHIHU_ACCESS_SECRET");
         }
         f();
-        unsafe {
-            match original {
-                Some(h) => env::set_var("HOME", h),
-                None => env::remove_var("HOME"),
-            }
-        }
+        restore_home(original);
     }
 
     #[test]
@@ -124,11 +133,49 @@ mod tests {
 
     #[test]
     #[serial]
+    fn resolve_secret_returns_env_when_config_missing() {
+        with_temp_home(|| {
+            unsafe { env::set_var("ZHIHU_ACCESS_SECRET", "env-only"); }
+            assert_eq!(Config::resolve_secret().unwrap(), "env-only");
+            unsafe { env::remove_var("ZHIHU_ACCESS_SECRET"); }
+        });
+    }
+
+    #[test]
+    #[serial]
     fn resolve_secret_falls_back_to_config() {
         with_temp_home(|| {
             Config::set_secret("from-config".into()).unwrap();
             assert_eq!(Config::resolve_secret().unwrap(), "from-config");
         });
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_secret_returns_config_when_env_unset() {
+        with_temp_home(|| {
+            Config::set_secret("cfg-only".into()).unwrap();
+            // ZHIHU_ACCESS_SECRET explicitly removed by with_temp_home.
+            assert_eq!(Config::resolve_secret().unwrap(), "cfg-only");
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn restore_home_unsets_when_original_was_none() {
+        let original = env::var("HOME").ok();
+        unsafe {
+            env::set_var("HOME", "/tmp/non-existent-for-test");
+        }
+        restore_home(None);
+        assert!(
+            env::var("HOME").is_err(),
+            "HOME should be unset after restore_home(None)"
+        );
+        // Restore so subsequent tests see the original environment.
+        if let Some(o) = original {
+            unsafe { env::set_var("HOME", o); }
+        }
     }
 
     #[test]

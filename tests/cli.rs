@@ -1,7 +1,11 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
+use serde_json::json;
+use serial_test::serial;
 use std::env;
 use tempfile::TempDir;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn with_temp_home<F>(f: F)
 where
@@ -86,4 +90,82 @@ fn env_secret_overrides_config() {
             .stdout(predicate::str::contains("\"configured\": true"))
             .stdout(predicate::str::contains("\"source\": \"env\""));
     });
+}
+
+#[test]
+fn auth_set_secret_empty_value_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.arg("auth").arg("set-secret").arg("");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("secret cannot be empty"));
+    });
+}
+
+// ---- Wiremock-backed tests: exercise the full `run` body of search/ask ----
+
+#[tokio::test]
+#[serial]
+async fn cli_search_zhihu_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/content/zhihu_search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0,
+            "Message": "ok",
+            "Data": [{"title": "stub"}],
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("search").arg("zhihu").arg("rust");
+    cmd.assert().success();
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_ask_non_stream_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "stub",
+            "choices": [{"message": {"role": "assistant", "content": "hi"}}],
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("ask").arg("hello");
+    cmd.assert().success();
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_ask_stream_against_mock_server_completes() {
+    let sse_body = concat!(
+        "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n",
+        "\n",
+        "data: [DONE]\n",
+        "\n",
+    );
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(sse_body))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("ask").arg("hello").arg("--stream");
+    cmd.assert().success();
 }

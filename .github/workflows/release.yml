@@ -1,0 +1,232 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: false
+            archive-ext: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+            archive-ext: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            cross: false
+            archive-ext: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            cross: false
+            archive-ext: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            cross: false
+            archive-ext: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          if [[ "${{ matrix.cross }}" == "true" ]]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+
+      - name: Package binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            binary="target/${{ matrix.target }}/release/zhihu.exe"
+            cp "$binary" "dist/zhihu-${{ matrix.target }}.exe"
+            cd dist && zip "../zhihu-${{ matrix.target }}.zip" "zhihu-${{ matrix.target }}.exe"
+          else
+            binary="target/${{ matrix.target }}/release/zhihu"
+            cp "$binary" "dist/zhihu-${{ matrix.target }}"
+            chmod +x "dist/zhihu-${{ matrix.target }}"
+            cd dist && tar czf "../zhihu-${{ matrix.target }}.tar.gz" "zhihu-${{ matrix.target }}"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhihu-${{ matrix.target }}
+          path: |
+            zhihu-${{ matrix.target }}.${{ matrix.archive-ext }}
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+
+  npm-publish:
+    name: Publish to npm
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Extract version
+        id: meta
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish npm packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          ./scripts/build-npm-packages.sh "${{ steps.meta.outputs.VERSION }}"
+
+  crates-io:
+    name: Publish to crates.io
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish crate
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --token "$CARGO_REGISTRY_TOKEN"
+
+  homebrew:
+    name: Update Homebrew tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Compute checksums and version
+        id: meta
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          for f in artifacts/zhihu-*.tar.gz; do
+            name=$(basename "$f" .tar.gz)
+            sha=$(sha256sum "$f" | cut -d' ' -f1)
+            echo "${name//-/_}=$sha" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Update tap repository
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          VERSION="${{ steps.meta.outputs.VERSION }}"
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/dawnswwwww/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cat > tap/Formula/zhihu-cli.rb <<EOF
+          class ZhihuCli < Formula
+            desc "CLI for the Zhihu Open Platform API"
+            homepage "https://github.com/dawnswwwww/zhihu-cli"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              on_intel do
+                url "https://github.com/dawnswwwww/zhihu-cli/releases/download/v${VERSION}/zhihu-x86_64-apple-darwin.tar.gz"
+                sha256 "${{ steps.meta.outputs.zhihu_x86_64_apple_darwin }}"
+              end
+              on_arm do
+                url "https://github.com/dawnswwwww/zhihu-cli/releases/download/v${VERSION}/zhihu-aarch64-apple-darwin.tar.gz"
+                sha256 "${{ steps.meta.outputs.zhihu_aarch64_apple_darwin }}"
+              end
+            end
+
+            on_linux do
+              on_intel do
+                url "https://github.com/dawnswwwww/zhihu-cli/releases/download/v${VERSION}/zhihu-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${{ steps.meta.outputs.zhihu_x86_64_unknown_linux_gnu }}"
+              end
+              on_arm do
+                url "https://github.com/dawnswwwww/zhihu-cli/releases/download/v${VERSION}/zhihu-aarch64-unknown-linux-gnu.tar.gz"
+                sha256 "${{ steps.meta.outputs.zhihu_aarch64_unknown_linux_gnu }}"
+              end
+            end
+
+            def install
+              bin.install "zhihu"
+            end
+
+            test do
+              assert_match "Zhihu Open Platform CLI", shell_output("#{bin}/zhihu --help")
+            end
+          end
+          EOF
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/zhihu-cli.rb
+          git commit -m "zhihu-cli ${VERSION}"
+          git push

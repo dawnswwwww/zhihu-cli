@@ -5,6 +5,18 @@ use serde_json::Value;
 
 pub const DEFAULT_BASE_URL: &str = "https://developer.zhihu.com";
 
+/// Resolve the API base URL: prefer `ZHIHU_OPENAPI_BASE_URL` env var,
+/// fall back to `DEFAULT_BASE_URL`, and strip any trailing slashes.
+///
+/// Extracted from `ZhihuClient::new` so the env-var branch logic is
+/// unit-testable without touching the global secret resolver.
+pub(crate) fn resolve_base_url() -> String {
+    std::env::var("ZHIHU_OPENAPI_BASE_URL")
+        .unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
+        .trim_end_matches('/')
+        .to_string()
+}
+
 pub struct ZhihuClient {
     client: Client,
     secret: String,
@@ -14,11 +26,7 @@ pub struct ZhihuClient {
 impl ZhihuClient {
     pub fn new() -> Result<Self> {
         let secret = Config::resolve_secret()?;
-        let base_url = std::env::var("ZHIHU_OPENAPI_BASE_URL")
-            .unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
-            .trim_end_matches('/')
-            .to_string();
-        Ok(Self::with_secret_and_base_url(secret, base_url))
+        Ok(Self::with_secret_and_base_url(secret, resolve_base_url()))
     }
 
     pub fn with_secret_and_base_url(secret: String, base_url: String) -> Self {
@@ -85,6 +93,42 @@ impl ZhihuClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+
+    // ---- resolve_base_url ----
+
+    #[test]
+    #[serial]
+    fn resolve_base_url_uses_default_when_env_unset() {
+        unsafe { std::env::remove_var("ZHIHU_OPENAPI_BASE_URL"); }
+        assert_eq!(resolve_base_url(), DEFAULT_BASE_URL);
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_base_url_uses_env_var_when_set() {
+        unsafe { std::env::set_var("ZHIHU_OPENAPI_BASE_URL", "https://custom.example.com"); }
+        assert_eq!(resolve_base_url(), "https://custom.example.com");
+        unsafe { std::env::remove_var("ZHIHU_OPENAPI_BASE_URL"); }
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_base_url_trims_trailing_slash() {
+        unsafe { std::env::set_var("ZHIHU_OPENAPI_BASE_URL", "https://custom.example.com/"); }
+        assert_eq!(resolve_base_url(), "https://custom.example.com");
+        unsafe { std::env::remove_var("ZHIHU_OPENAPI_BASE_URL"); }
+    }
+
+    #[test]
+    #[serial]
+    fn resolve_base_url_trims_multiple_trailing_slashes() {
+        unsafe { std::env::set_var("ZHIHU_OPENAPI_BASE_URL", "https://custom.example.com///"); }
+        assert_eq!(resolve_base_url(), "https://custom.example.com");
+        unsafe { std::env::remove_var("ZHIHU_OPENAPI_BASE_URL"); }
+    }
+
+    // ---- with_secret_and_base_url ----
 
     #[test]
     fn custom_constructor_sets_secret_and_base_url() {
