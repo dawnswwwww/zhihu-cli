@@ -80,10 +80,9 @@ for i in "${!TARGETS[@]}"; do
 
     if [[ "${target}" == *windows* ]]; then
         tar -xzf "$artifact" -C "$pkg_dir/bin/"
-        mv "$pkg_dir/bin/zhihu-${target}.exe" "$pkg_dir/bin/zhihu.exe"
+        # artifact contains zhihu.exe
     else
         tar -xzf "$artifact" -C "$pkg_dir/bin/"
-        mv "$pkg_dir/bin/zhihu-${target}" "$pkg_dir/bin/zhihu"
         chmod +x "$pkg_dir/bin/zhihu"
     fi
 

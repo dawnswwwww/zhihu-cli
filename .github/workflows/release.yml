@@ -65,13 +65,13 @@ jobs:
           mkdir -p dist
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             binary="target/${{ matrix.target }}/release/zhihu.exe"
-            cp "$binary" "dist/zhihu-${{ matrix.target }}.exe"
-            cd dist && tar czf "../zhihu-${{ matrix.target }}.tar.gz" "zhihu-${{ matrix.target }}.exe"
+            cp "$binary" "dist/zhihu.exe"
+            cd dist && tar czf "../zhihu-${{ matrix.target }}.tar.gz" "zhihu.exe"
           else
             binary="target/${{ matrix.target }}/release/zhihu"
-            cp "$binary" "dist/zhihu-${{ matrix.target }}"
-            chmod +x "dist/zhihu-${{ matrix.target }}"
-            cd dist && tar czf "../zhihu-${{ matrix.target }}.tar.gz" "zhihu-${{ matrix.target }}"
+            cp "$binary" "dist/zhihu"
+            chmod +x "dist/zhihu"
+            cd dist && tar czf "../zhihu-${{ matrix.target }}.tar.gz" "zhihu"
           fi
 
       - name: Upload artifact
