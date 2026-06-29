@@ -1,8 +1,7 @@
 use crate::cli::AuthCommand;
 use crate::config::Config;
 use crate::error::{Result, ZhihuError};
-use crate::output::{print_error, print_json};
-use serde::Serialize;
+use crate::output::{dispatch_result, print_error};
 use serde_json::{json, Value};
 use std::io::{self, BufRead, Write};
 
@@ -11,16 +10,6 @@ pub async fn run(cmd: AuthCommand) {
     let mut lock = stdin.lock();
     if let Err(e) = dispatch_result(handle(cmd, &mut lock)) {
         print_error(&e);
-    }
-}
-
-/// Dispatch a command's `Result` to the appropriate output: pretty-print
-/// the value or print the error. Pure (no early exit) so both branches are
-/// unit-testable.
-pub(crate) fn dispatch_result<T: Serialize>(result: Result<T>) -> Result<()> {
-    match result {
-        Ok(value) => print_json(&value),
-        Err(e) => Err(e),
     }
 }
 
@@ -96,47 +85,14 @@ mod tests {
     //! Unit tests for the auth command's pure logic. The I/O layers (real
     //! stdin, real config file) are exercised by `tests/cli.rs::auth_*`.
 
-    use super::{dispatch_result, handle, read_and_validate_secret, save_secret, status_payload, validate_secret};
+    use super::{handle, read_and_validate_secret, save_secret, status_payload, validate_secret};
     use crate::cli::AuthCommand;
     use crate::config::Config;
-    use crate::error::{Result, ZhihuError};
-    use serde::{Serialize, Serializer};
-    use serde_json::{json, Value};
+    use crate::error::ZhihuError;
+    use serde_json::json;
     use serial_test::serial;
     use std::env;
     use std::io;
-
-    struct AlwaysFails;
-    impl Serialize for AlwaysFails {
-        fn serialize<S: Serializer>(
-            &self,
-            _s: S,
-        ) -> std::result::Result<S::Ok, S::Error> {
-            Err(serde::ser::Error::custom("intentional test failure"))
-        }
-    }
-
-    // ---- dispatch_result ----
-
-    #[test]
-    fn dispatch_result_ok_path_prints_value() {
-        let result: Result<Value> = Ok(json!({"ok": true}));
-        assert!(dispatch_result(result).is_ok());
-    }
-
-    #[test]
-    fn dispatch_result_err_path_returns_error() {
-        let result: Result<Value> = Err(ZhihuError::MissingSecret);
-        let err = dispatch_result(result).expect_err("Err should propagate");
-        assert!(matches!(err, ZhihuError::MissingSecret));
-    }
-
-    #[test]
-    fn dispatch_result_propagates_serialize_error() {
-        let result: Result<&AlwaysFails> = Ok(&AlwaysFails);
-        let err = dispatch_result(result).expect_err("AlwaysFails should not serialize");
-        assert!(matches!(err, ZhihuError::InvalidArgument(_)));
-    }
 
     // ---- save_secret ----
 

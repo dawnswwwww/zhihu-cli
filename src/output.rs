@@ -1,4 +1,4 @@
-use crate::error::ZhihuError;
+use crate::error::{Result, ZhihuError};
 use serde::Serialize;
 use std::process;
 
@@ -29,7 +29,7 @@ pub(crate) fn to_json_line_string<T: Serialize>(value: &T) -> serde_json::Result
 /// serialization fails (the caller may then decide to print an error and
 /// exit). Returning `Result` instead of exiting internally makes this
 /// function testable for both happy and failure paths.
-pub fn print_json<T: Serialize>(value: &T) -> Result<(), ZhihuError> {
+pub fn print_json<T: Serialize>(value: &T) -> Result<()> {
     match to_json_string(value) {
         Ok(s) => {
             println!("{}", s);
@@ -44,7 +44,7 @@ pub fn print_json<T: Serialize>(value: &T) -> Result<(), ZhihuError> {
 /// Single-line print a JSON-serializable value to stdout. Returns `Err`
 /// if serialization fails. See [`print_json`] for the rationale behind
 /// the `Result` return type.
-pub fn print_json_line<T: Serialize>(value: &T) -> Result<(), ZhihuError> {
+pub fn print_json_line<T: Serialize>(value: &T) -> Result<()> {
     match to_json_line_string(value) {
         Ok(s) => {
             println!("{}", s);
@@ -53,6 +53,19 @@ pub fn print_json_line<T: Serialize>(value: &T) -> Result<(), ZhihuError> {
         Err(e) => Err(ZhihuError::InvalidArgument(format!(
             "JSON serialize failed: {e}"
         ))),
+    }
+}
+
+/// Dispatch a command's `Result` to the appropriate output.
+///
+/// On success, pretty-print the value as JSON. On error, propagate the error
+/// so the caller can decide how to render it (typically via [`print_error`]).
+/// This helper is shared across all command modules to avoid duplicating the
+/// same match in every `run` implementation.
+pub(crate) fn dispatch_result<T: Serialize>(result: Result<T>) -> Result<()> {
+    match result {
+        Ok(value) => print_json(&value),
+        Err(e) => Err(e),
     }
 }
 
@@ -88,8 +101,8 @@ pub(crate) fn format_error_json(err: &ZhihuError) -> String {
 mod tests {
     //! Unit tests for the JSON conversion helpers and the error wire format.
 
-    use super::{format_error_json, print_json, print_json_line, to_json_line_string, to_json_string};
-    use crate::error::ZhihuError;
+    use super::{dispatch_result, format_error_json, print_json, print_json_line, to_json_line_string, to_json_string};
+    use crate::error::{Result, ZhihuError};
     use reqwest::StatusCode;
     use serde::{Serialize, Serializer};
     use serde_json::{json, Value};
@@ -99,7 +112,7 @@ mod tests {
     /// otherwise be unreachable with realistic types.
     struct AlwaysFails;
     impl Serialize for AlwaysFails {
-        fn serialize<S: Serializer>(&self, _serializer: S) -> Result<S::Ok, S::Error> {
+        fn serialize<S: Serializer>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error> {
             Err(serde::ser::Error::custom("intentional test failure"))
         }
     }
@@ -219,5 +232,27 @@ mod tests {
     fn output_is_single_line() {
         let s = format_error_json(&ZhihuError::MissingSecret);
         assert!(!s.contains('\n'), "expected single line, got: {s:?}");
+    }
+
+    // ---- dispatch_result ----
+
+    #[test]
+    fn dispatch_result_ok_path_prints_value() {
+        let result: Result<Value> = Ok(json!({"ok": true}));
+        assert!(dispatch_result(result).is_ok());
+    }
+
+    #[test]
+    fn dispatch_result_err_path_returns_error() {
+        let result: Result<Value> = Err(ZhihuError::MissingSecret);
+        let err = dispatch_result(result).expect_err("Err should propagate");
+        assert!(matches!(err, ZhihuError::MissingSecret));
+    }
+
+    #[test]
+    fn dispatch_result_propagates_serialize_error() {
+        let result: Result<&AlwaysFails> = Ok(&AlwaysFails);
+        let err = dispatch_result(result).expect_err("AlwaysFails should not serialize");
+        assert!(matches!(err, ZhihuError::InvalidArgument(_)));
     }
 }

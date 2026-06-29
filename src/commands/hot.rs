@@ -1,21 +1,11 @@
 use crate::cli::HotArgs;
 use crate::client::ZhihuClient;
 use crate::error::Result;
-use crate::output::{print_error, print_json};
-use serde::Serialize;
+use crate::output::{dispatch_result, print_error};
 
 pub async fn run(args: HotArgs) {
     if let Err(e) = dispatch_result(handle(args).await) {
         print_error(&e);
-    }
-}
-
-/// Dispatch a command's `Result` to the appropriate output. See the
-/// matching helper in `commands::auth` for the rationale.
-pub(crate) fn dispatch_result<T: Serialize>(result: Result<T>) -> Result<()> {
-    match result {
-        Ok(value) => print_json(&value),
-        Err(e) => Err(e),
     }
 }
 
@@ -96,14 +86,14 @@ mod tests {
     #[test]
     fn dispatch_result_propagates_serialize_error() {
         let result: Result<&AlwaysFails> = Ok(&AlwaysFails);
-        let err = super::dispatch_result(result).expect_err("AlwaysFails should not serialize");
+        let err = crate::output::dispatch_result(result).expect_err("AlwaysFails should not serialize");
         assert!(matches!(err, ZhihuError::InvalidArgument(_)));
     }
 
     #[test]
     fn dispatch_result_returns_err_for_input_err() {
         let result: Result<serde_json::Value> = Err(ZhihuError::MissingSecret);
-        let err = super::dispatch_result(result).expect_err("Err should propagate");
+        let err = crate::output::dispatch_result(result).expect_err("Err should propagate");
         assert!(matches!(err, ZhihuError::MissingSecret));
     }
 

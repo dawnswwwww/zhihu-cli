@@ -1,21 +1,11 @@
 use crate::cli::SearchCommand;
 use crate::client::ZhihuClient;
 use crate::error::Result;
-use crate::output::{print_error, print_json};
-use serde::Serialize;
+use crate::output::{dispatch_result, print_error};
 
 pub async fn run(cmd: SearchCommand) {
     if let Err(e) = dispatch_result(handle(cmd).await) {
         print_error(&e);
-    }
-}
-
-/// Dispatch a command's `Result` to the appropriate output. See the
-/// matching helper in `commands::auth` for the rationale.
-pub(crate) fn dispatch_result<T: Serialize>(result: Result<T>) -> Result<()> {
-    match result {
-        Ok(value) => print_json(&value),
-        Err(e) => Err(e),
     }
 }
 
@@ -92,10 +82,11 @@ mod tests {
     //! Unit tests for `build_request` — the pure parameter-assembly layer
     //! of the search commands. The HTTP layer is exercised by `mocked_api.rs`.
 
-    use super::{build_request, dispatch_result};
+    use super::build_request;
     use crate::cli::{SearchCommand, SearchDb};
     use crate::client::ZhihuClient;
     use crate::error::{Result, ZhihuError};
+    use crate::output::dispatch_result;
     use serde::{Serialize, Serializer};
     use serde_json::Value;
 
