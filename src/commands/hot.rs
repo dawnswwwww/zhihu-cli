@@ -1,4 +1,31 @@
 use crate::cli::HotArgs;
+use crate::client::ZhihuClient;
+use crate::error::Result;
+use crate::output::{print_error, print_json};
+use serde::Serialize;
+
+pub async fn run(args: HotArgs) {
+    if let Err(e) = dispatch_result(handle(args).await) {
+        print_error(&e);
+    }
+}
+
+pub(crate) fn dispatch_result<T: Serialize>(result: Result<T>) -> Result<()> {
+    match result {
+        Ok(value) => print_json(&value),
+        Err(e) => Err(e),
+    }
+}
+
+async fn handle(args: HotArgs) -> Result<serde_json::Value> {
+    handle_with_client(args, &ZhihuClient::new()?).await
+}
+
+pub(crate) async fn handle_with_client(args: HotArgs, client: &ZhihuClient) -> Result<serde_json::Value> {
+    let req = build_request(&args);
+    let query_refs: Vec<(&str, &str)> = req.query.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    client.get(req.path, &query_refs).await
+}
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct HotRequest {
@@ -17,6 +44,55 @@ pub(crate) fn build_request(args: &HotArgs) -> HotRequest {
 mod tests {
     use super::build_request;
     use crate::cli::HotArgs;
+    use crate::error::{Result, ZhihuError};
+    use serde::{Serialize, Serializer};
+
+    struct AlwaysFails;
+    impl Serialize for AlwaysFails {
+        fn serialize<S: Serializer>(&self, _s: S) -> std::result::Result<S::Ok, S::Error> {
+            Err(serde::ser::Error::custom("intentional test failure"))
+        }
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn handle_with_client_calls_hot_list_endpoint() {
+        use serde_json::json;
+        use wiremock::matchers::{method, path, query_param};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/content/hot_list"))
+            .and(query_param("Limit", "10"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "Code": 0,
+                "Message": "ok",
+                "Data": { "Total": 1, "Items": [] }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = crate::client::ZhihuClient::with_secret_and_base_url("fake".into(), server.uri());
+        let args = HotArgs { limit: 10 };
+        let result = super::handle_with_client(args, &client).await.unwrap();
+        assert_eq!(result["Code"], 0);
+    }
+
+    #[test]
+    fn dispatch_result_propagates_serialize_error() {
+        let result: Result<&AlwaysFails> = Ok(&AlwaysFails);
+        let err = super::dispatch_result(result).expect_err("AlwaysFails should not serialize");
+        assert!(matches!(err, ZhihuError::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn dispatch_result_returns_err_for_input_err() {
+        let result: Result<serde_json::Value> = Err(ZhihuError::MissingSecret);
+        let err = super::dispatch_result(result).expect_err("Err should propagate");
+        assert!(matches!(err, ZhihuError::MissingSecret));
+    }
 
     fn pairs(req: &super::HotRequest) -> Vec<(&str, &str)> {
         req.query.iter().map(|(k, v)| (*k, v.as_str())).collect()
