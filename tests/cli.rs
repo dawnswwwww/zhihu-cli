@@ -4,7 +4,7 @@ use serde_json::json;
 use serial_test::serial;
 use std::env;
 use tempfile::TempDir;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn with_temp_home<F>(f: F)
@@ -191,6 +191,7 @@ async fn cli_hot_against_mock_server_succeeds() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/api/v1/content/hot_list"))
+        .and(query_param("Limit", "5"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "Code": 0,
             "Message": "ok",
