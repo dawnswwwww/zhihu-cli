@@ -47,7 +47,7 @@ EXTS=(
     tar.gz
     tar.gz
     tar.gz
-    zip
+    tar.gz
 )
 
 # Resolve npm os/cpu fields from package name.
@@ -84,8 +84,8 @@ for i in "${!TARGETS[@]}"; do
 
     echo "Packaging $pkg from $artifact ..."
 
-    if [[ "$ext" == "zip" ]]; then
-        unzip -q -o "$artifact" -d "$pkg_dir/bin/"
+    if [[ "${target}" == *windows* ]]; then
+        tar -xzf "$artifact" -C "$pkg_dir/bin/"
         mv "$pkg_dir/bin/zhihu-${target}.exe" "$pkg_dir/bin/zhihu.exe"
     else
         tar -xzf "$artifact" -C "$pkg_dir/bin/"

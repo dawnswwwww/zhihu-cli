@@ -35,7 +35,7 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             cross: false
-            archive-ext: zip
+            archive-ext: tar.gz
 
     steps:
       - name: Checkout
@@ -66,7 +66,7 @@ jobs:
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             binary="target/${{ matrix.target }}/release/zhihu.exe"
             cp "$binary" "dist/zhihu-${{ matrix.target }}.exe"
-            cd dist && zip "../zhihu-${{ matrix.target }}.zip" "zhihu-${{ matrix.target }}.exe"
+            cd dist && tar czf "../zhihu-${{ matrix.target }}.tar.gz" "zhihu-${{ matrix.target }}.exe"
           else
             binary="target/${{ matrix.target }}/release/zhihu"
             cp "$binary" "dist/zhihu-${{ matrix.target }}"
