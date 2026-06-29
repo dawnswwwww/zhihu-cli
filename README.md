@@ -9,7 +9,7 @@ Supports authentication, Zhihu search, global web search, and the Zhida chat com
 ### From npm (recommended for Agent environments)
 
 ```bash
-npm install -g zhihu-cli
+npm install -g @dawnswwwww/zhihu-cli
 zhihu --help
 ```
 
@@ -91,8 +91,8 @@ See [docs/development.md](docs/development.md) for the full workflow.
 Pushing a SemVer tag triggers the release workflow:
 
 ```bash
-git tag -a v0.1.0 -m "Release 0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "Release 0.1.1"
+git push origin v0.1.1
 ```
 
 This builds cross-platform binaries, creates a GitHub Release, publishes `zhihu-cli` to npm, and updates the Homebrew tap.

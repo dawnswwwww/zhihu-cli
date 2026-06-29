@@ -5,8 +5,7 @@
 #   ./scripts/build-npm-packages.sh <version>
 #
 # Expects release artifacts to be available at:
-#   ./artifacts/zhihu-<target>.tar.gz   (Unix)
-#   ./artifacts/zhihu-<target>.zip      (Windows)
+#   ./artifacts/zhihu-<target>.tar.gz
 #
 # Set DRY_RUN=1 to build packages locally without publishing to npm.
 
@@ -16,6 +15,7 @@ VERSION="${1:?Usage: $0 <version>}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NPM_DIR="$ROOT/npm"
 ARTIFACTS_DIR="$ROOT/artifacts"
+SCOPE="@dawnswwwww"
 DRY_RUN="${DRY_RUN:-}"
 
 if [[ -n "$DRY_RUN" ]]; then
@@ -36,31 +36,26 @@ TARGETS=(
     x86_64-pc-windows-msvc
 )
 PKGS=(
-    zhihu-cli-darwin-x64
-    zhihu-cli-darwin-arm64
-    zhihu-cli-linux-x64
-    zhihu-cli-linux-arm64
-    zhihu-cli-win32-x64
-)
-EXTS=(
-    tar.gz
-    tar.gz
-    tar.gz
-    tar.gz
-    tar.gz
+    ${SCOPE}/zhihu-cli-darwin-x64
+    ${SCOPE}/zhihu-cli-darwin-arm64
+    ${SCOPE}/zhihu-cli-linux-x64
+    ${SCOPE}/zhihu-cli-linux-arm64
+    ${SCOPE}/zhihu-cli-win32-x64
 )
 
-# Resolve npm os/cpu fields from package name.
+# Resolve npm os/cpu fields from scoped package name.
 os_for_pkg() {
-    case "$1" in
-        *-darwin-*) echo darwin ;;
-        *-linux-*)  echo linux ;;
-        *-win32-*)  echo win32 ;;
+    local name="${1#${SCOPE}/zhihu-cli-}"
+    case "$name" in
+        darwin-*) echo darwin ;;
+        linux-*)  echo linux ;;
+        win32-*)  echo win32 ;;
     esac
 }
 
 cpu_for_pkg() {
-    case "$1" in
+    local name="${1#${SCOPE}/zhihu-cli-}"
+    case "$name" in
         *-x64)   echo x64 ;;
         *-arm64) echo arm64 ;;
     esac
@@ -70,8 +65,7 @@ cpu_for_pkg() {
 for i in "${!TARGETS[@]}"; do
     target="${TARGETS[$i]}"
     pkg="${PKGS[$i]}"
-    ext="${EXTS[$i]}"
-    artifact="$ARTIFACTS_DIR/zhihu-${target}.${ext}"
+    artifact="$ARTIFACTS_DIR/zhihu-${target}.tar.gz"
 
     if [[ ! -f "$artifact" ]]; then
         echo "error: missing artifact: $artifact" >&2
@@ -131,7 +125,7 @@ const { spawn } = require('child_process');
 
 const platform = process.platform;
 const arch = process.arch;
-const packageName = `zhihu-cli-${platform}-${arch}`;
+const packageName = `@dawnswwwww/zhihu-cli-${platform}-${arch}`;
 
 let binaryPath;
 try {
@@ -157,7 +151,7 @@ cp "$ROOT/README.md" "$main_pkg_dir/README.md"
 
 cat > "$main_pkg_dir/package.json" <<EOF
 {
-  "name": "zhihu-cli",
+  "name": "${SCOPE}/zhihu-cli",
   "version": "$VERSION",
   "description": "CLI for the Zhihu Open Platform API",
   "license": "MIT",
@@ -173,11 +167,11 @@ cat > "$main_pkg_dir/package.json" <<EOF
     "README.md"
   ],
   "optionalDependencies": {
-    "zhihu-cli-darwin-x64": "$VERSION",
-    "zhihu-cli-darwin-arm64": "$VERSION",
-    "zhihu-cli-linux-x64": "$VERSION",
-    "zhihu-cli-linux-arm64": "$VERSION",
-    "zhihu-cli-win32-x64": "$VERSION"
+    "${SCOPE}/zhihu-cli-darwin-x64": "$VERSION",
+    "${SCOPE}/zhihu-cli-darwin-arm64": "$VERSION",
+    "${SCOPE}/zhihu-cli-linux-x64": "$VERSION",
+    "${SCOPE}/zhihu-cli-linux-arm64": "$VERSION",
+    "${SCOPE}/zhihu-cli-win32-x64": "$VERSION"
   },
   "os": ["darwin", "linux", "win32"],
   "cpu": ["x64", "arm64"]
@@ -185,8 +179,8 @@ cat > "$main_pkg_dir/package.json" <<EOF
 EOF
 
 if [[ -n "$DRY_RUN" ]]; then
-    echo "Would publish zhihu-cli@$VERSION (dry run)"
+    echo "Would publish ${SCOPE}/zhihu-cli@$VERSION (dry run)"
 else
     (cd "$main_pkg_dir" && npm publish --access public)
-    echo "Published zhihu-cli@$VERSION"
+    echo "Published ${SCOPE}/zhihu-cli@$VERSION"
 fi
