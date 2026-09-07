@@ -28,6 +28,9 @@ pub enum ZhihuError {
 
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
+
+    #[error("Task {task_id} did not finish within {waited_secs}s")]
+    TaskTimeout { task_id: String, waited_secs: u64 },
 }
 
 pub type Result<T> = std::result::Result<T, ZhihuError>;
@@ -133,5 +136,14 @@ mod tests {
     fn invalid_argument_includes_user_supplied_reason() {
         let err = ZhihuError::InvalidArgument("secret cannot be empty".to_string());
         assert_eq!(err.to_string(), "Invalid argument: secret cannot be empty");
+    }
+
+    #[test]
+    fn task_timeout_includes_task_id_and_waited_secs() {
+        let err = ZhihuError::TaskTimeout {
+            task_id: "pdf_1".to_string(),
+            waited_secs: 600,
+        };
+        assert_eq!(err.to_string(), "Task pdf_1 did not finish within 600s");
     }
 }

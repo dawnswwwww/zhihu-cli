@@ -76,23 +76,30 @@ The aspiration is **100%** — see "Gap to 100%" below for what's missing.
 | File | Line Cov | Status |
 |---|---|---|
 | `src/error.rs` | **100%** | ✅ done |
-| `src/client.rs` | **100%** | ✅ done |
 | `src/main.rs` | **100%** | ✅ done |
+| `src/client.rs` | **100%** | ✅ done |
 | `src/commands/search.rs` | **100%** | ✅ done |
+| `src/commands/hot.rs` | **100%** | ✅ done |
+| `src/commands/quota.rs` | **100%** | ✅ done |
+| `src/commands/user.rs` | **100%** | ✅ done |
+| `src/commands/knowledge.rs` | 99.63% | 🟡 test panic arm |
+| `src/commands/pdf.rs` | 98.83% | 🟡 test panic arms |
+| `src/commands/ppt.rs` | 97.95% | 🟡 test panic arms |
+| `src/commands/task_poll.rs` | 97.94% | 🟡 closing-brace artifacts |
 | `src/commands/ask.rs` | 99.66% | 🟡 `run` error path / closing brace artifact |
 | `src/commands/auth.rs` | 95.91% | 🟡 test artifacts only |
 | `src/output.rs` | 93.80% | 🟡 `print_error` exit path / test artifacts |
 | `src/config.rs` | 97.83% | 🟡 closing-brace artifacts |
-| `src/cli.rs` | 92.94% | 🟡 test panic arms |
-| `src/commands/hot.rs` | **100%** | ✅ done |
-| `src/commands/search.rs` | **100%** | ✅ done |
-| **TOTAL** | **98.07%** | ✅ passes 80% gate |
+| `src/cli.rs` | 91.46% | 🟡 test panic arms |
+| **TOTAL** | **97.93%** | ✅ passes 80% gate |
 
-**Function coverage: 100%** (every public function is called by at least one test).
+**Function coverage: 99.48%** (the two misses are the private `handle`
+shims in `commands/{knowledge,pdf}.rs`, which execute in the binary target
+during CLI e2e tests but are not attributed to the lib target).
 
 ## The final ~2% — irreducible coverage artifacts
 
-25 lines remain uncovered. They break down into two categories:
+56 lines remain uncovered. They break down into two categories:
 
 ### Category A: `_ => panic!("expected …")` arms in test matches (cli.rs)
 
@@ -111,7 +118,7 @@ even though it has no executable code. They appear as uncovered when
 the surrounding block is entered but no further code lives after the
 last statement (e.g., a test that ends after a single `assert!`).
 
-The `run` functions in `commands/{ask,search,auth,hot}.rs` call `print_error`,
+The `run` functions in the command modules call `print_error`,
 which invokes `process::exit(1)` and never returns. The line after the
 `print_error` call (typically the closing `}`) is therefore unreachable
 in unit tests and counted as uncovered.

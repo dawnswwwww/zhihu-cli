@@ -26,7 +26,12 @@ fn help_shows_commands() {
         .stdout(predicate::str::contains("auth"))
         .stdout(predicate::str::contains("search"))
         .stdout(predicate::str::contains("ask"))
-        .stdout(predicate::str::contains("hot"));
+        .stdout(predicate::str::contains("hot"))
+        .stdout(predicate::str::contains("quota"))
+        .stdout(predicate::str::contains("user"))
+        .stdout(predicate::str::contains("kb"))
+        .stdout(predicate::str::contains("pdf"))
+        .stdout(predicate::str::contains("ppt"));
 }
 
 #[test]
@@ -207,4 +212,277 @@ async fn cli_hot_against_mock_server_succeeds() {
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("\"Code\": 0"));
+}
+
+#[test]
+fn quota_without_auth_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env_remove("ZHIHU_ACCESS_SECRET");
+        cmd.arg("quota");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("\"code\":20001"))
+            .stderr(predicate::str::contains("Missing access secret"));
+    });
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_quota_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/quota"))
+        .and(query_param("APIIDs", "knowledge"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0,
+            "Message": "success",
+            "Data": [{ "APIID": "knowledge", "TotalQuota": 500, "TotalUsed": 12, "RemainingQuota": 488 }],
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("quota").arg("--ids").arg("knowledge");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"Code\": 0"));
+}
+
+#[test]
+fn user_without_auth_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env_remove("ZHIHU_ACCESS_SECRET");
+        cmd.arg("user").arg("favlists");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("\"code\":20001"))
+            .stderr(predicate::str::contains("Missing access secret"));
+    });
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_user_contents_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/user/contents"))
+        .and(query_param("ContentType", "answer"))
+        .and(query_param("Limit", "5"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0,
+            "Message": "success",
+            "Data": { "Items": [], "Paging": { "IsEnd": true, "Totals": 0 } },
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("user").arg("contents").arg("--type").arg("answer").arg("--limit").arg("5");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"Code\": 0"));
+}
+
+#[test]
+fn kb_without_auth_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env_remove("ZHIHU_ACCESS_SECRET");
+        cmd.arg("kb").arg("list");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("\"code\":20001"))
+            .stderr(predicate::str::contains("Missing access secret"));
+    });
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_kb_list_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/knowledge/bases"))
+        .and(query_param("Scope", "all"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0,
+            "Message": "success",
+            "Data": { "Items": [] },
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("kb").arg("list");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"Code\": 0"));
+}
+
+#[test]
+fn kb_search_without_ids_or_scopes_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+        cmd.arg("kb").arg("search").arg("query");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("Invalid argument"))
+            .stderr(predicate::str::contains("at least one --kb-id or --scope"));
+    });
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_kb_upload_against_mock_server_succeeds() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let file_path = tmp.path().join("doc.md");
+    std::fs::write(&file_path, "# hello kb").unwrap();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/knowledge/files"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0,
+            "Message": "success",
+            "Data": { "KnowledgeBaseID": "kb-1", "RecallContentID": "abc", "FileName": "doc.md" },
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("kb").arg("upload").arg(file_path.to_str().unwrap());
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"Code\": 0"));
+}
+
+#[test]
+fn pdf_without_auth_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env_remove("ZHIHU_ACCESS_SECRET");
+        cmd.arg("pdf").arg("status").arg("pdf_1");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("\"code\":20001"))
+            .stderr(predicate::str::contains("Missing access secret"));
+    });
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_pdf_parse_one_shot_against_mock_server_succeeds() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let file_path = tmp.path().join("report.pdf");
+    std::fs::write(&file_path, "%PDF-1.4 fake").unwrap();
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/pdf-parse/tasks/pdf_1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0, "Message": "success",
+            "Data": {
+                "task_id": "pdf_1", "task_status": "succeeded", "progress": 1,
+                "result": { "url": "https://example.com/result.json", "expires_at_ms": 1782800000000_i64 }
+            }
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/pdf-parse/tasks"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0, "Message": "success",
+            "Data": { "task_id": "pdf_1", "task_status": "pending" }
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/resources/v1/files"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0, "Message": "success", "Data": { "file_id": "file_abc" }
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("pdf")
+        .arg("parse")
+        .arg(file_path.to_str().unwrap())
+        .arg("--timeout-secs")
+        .arg("30");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"task_status\": \"succeeded\""))
+        .stdout(predicate::str::contains("result.json"));
+}
+
+#[test]
+fn ppt_without_auth_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env_remove("ZHIHU_ACCESS_SECRET");
+        cmd.arg("ppt").arg("status").arg("ppt_1");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("\"code\":20001"))
+            .stderr(predicate::str::contains("Missing access secret"));
+    });
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_ppt_generate_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/ppt-generation/tasks/ppt_1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0, "Message": "success",
+            "Data": {
+                "task_id": "ppt_1", "task_status": "succeeded", "progress": 1,
+                "result": { "url": "https://example.com/deck.pptx", "expires_at_ms": 1782800000000_i64 }
+            }
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/ppt-generation/tasks"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0, "Message": "success",
+            "Data": { "task_id": "ppt_1", "task_status": "pending" }
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("ppt")
+        .arg("generate")
+        .arg("https://zhuanlan.zhihu.com/p/987654321")
+        .arg("--pages")
+        .arg("12")
+        .arg("--timeout-secs")
+        .arg("30");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"task_status\": \"succeeded\""))
+        .stdout(predicate::str::contains("deck.pptx"));
 }

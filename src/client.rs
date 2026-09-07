@@ -88,6 +88,33 @@ impl ZhihuClient {
             .json(&body);
         self.send_json(builder).await
     }
+
+    /// POST a multipart form (file uploads). The multipart Content-Type
+    /// header with boundary is set by reqwest; callers must not preset it.
+    pub async fn post_multipart(
+        &self,
+        path: &str,
+        form: reqwest::multipart::Form,
+    ) -> Result<Value> {
+        let builder = self.request(Method::POST, path).multipart(form);
+        self.send_json(builder).await
+    }
+
+    /// GET with the optional `X-OAuth-Token` header for user-data APIs:
+    /// absent token queries the caller's own data, a token queries the
+    /// OAuth-authorized user's data.
+    pub async fn get_with_oauth(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        oauth_token: Option<&str>,
+    ) -> Result<Value> {
+        let mut builder = self.request(Method::GET, path).query(query);
+        if let Some(token) = oauth_token {
+            builder = builder.header("X-OAuth-Token", token);
+        }
+        self.send_json(builder).await
+    }
 }
 
 #[cfg(test)]

@@ -1,4 +1,10 @@
 pub mod auth;
 pub mod ask;
 pub mod hot;
+pub mod knowledge;
+pub mod pdf;
+pub mod ppt;
+pub mod quota;
 pub mod search;
+pub mod task_poll;
+pub mod user;

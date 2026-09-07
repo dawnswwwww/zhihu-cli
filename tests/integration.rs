@@ -124,3 +124,58 @@ async fn hot_list_returns_results() {
         "returned items should not exceed reported total"
     );
 }
+
+#[tokio::test]
+#[serial]
+async fn quota_returns_usage() {
+    let Some(secret) = get_secret() else { return };
+    let client = zhihu_cli::client::ZhihuClient::with_secret_and_base_url(
+        secret,
+        "https://developer.zhihu.com".into(),
+    );
+    let resp = client
+        .get("/api/v1/quota", &[("APIIDs", "knowledge")])
+        .await
+        .expect("quota should succeed");
+    assert_eq!(resp.get("Code"), Some(&serde_json::json!(0)));
+    let items = resp
+        .get("Data")
+        .and_then(|v| v.as_array())
+        .expect("Data should be an array of quota items");
+    assert!(!items.is_empty(), "knowledge quota item should be present");
+    let item = &items[0];
+    assert!(item.get("APIID").is_some());
+    assert!(item.get("RemainingQuota").is_some());
+}
+
+#[tokio::test]
+#[serial]
+async fn user_favlists_returns_results() {
+    let Some(secret) = get_secret() else { return };
+    let client = zhihu_cli::client::ZhihuClient::with_secret_and_base_url(
+        secret,
+        "https://developer.zhihu.com".into(),
+    );
+    let resp = client
+        .get("/api/v1/user/favlists", &[("Limit", "5")])
+        .await
+        .expect("user favlists should succeed");
+    assert_eq!(resp.get("Code"), Some(&serde_json::json!(0)));
+    assert!(resp.get("Data").is_some());
+}
+
+#[tokio::test]
+#[serial]
+async fn kb_list_returns_results() {
+    let Some(secret) = get_secret() else { return };
+    let client = zhihu_cli::client::ZhihuClient::with_secret_and_base_url(
+        secret,
+        "https://developer.zhihu.com".into(),
+    );
+    let resp = client
+        .get("/api/v1/knowledge/bases", &[("Scope", "all")])
+        .await
+        .expect("kb list should succeed");
+    assert_eq!(resp.get("Code"), Some(&serde_json::json!(0)));
+    assert!(resp.get("Data").is_some());
+}
