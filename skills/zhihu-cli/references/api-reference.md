@@ -1,7 +1,7 @@
 # 知乎开放平台 API 参考（CLI 设计用）
 
 > 来源：https://developer.zhihu.com/docs
-> 抓取时间：2026-06-26（第 1-4 节）；2026-09-07（第 5-9 节）
+> 抓取时间：2026-06-26（第 1-4 节）；2026-09-07（第 5-9 节）；2026-09-24（第 6 节更新，新增第 10-11 节）
 > 接口统一接入域名：`https://developer.zhihu.com`
 
 ## 1. 全局约定
@@ -236,15 +236,29 @@ Data：`Total`（Int64，实际返回条数）、`Items`（数组）。Item：`T
 | URL | `GET https://developer.zhihu.com/api/v1/quota` |
 | 说明 | 查询当前 Access Secret 所属账号自然日内的各项能力的每日限免额度，不消耗业务额度 |
 
-知识库文件上传/列表/内容列表/检索共用 `knowledge` 额度池；PDF 解析与 PPT 生成共用 `tools` 额度池。
+知识库文件上传/列表/内容列表/检索共用 `knowledge` 额度池；PDF 解析与 PPT 生成共用 `tools` 额度池；问题推荐与创作能力接口共用 `creator` 额度池；问题回答使用独立的 `question_answers` 额度池。
 
 #### 请求参数
 
 | Query 参数 | 类型 | 必填 | 说明 |
 |------------|------|------|------|
-| `APIIDs` | String | 否 | 逗号分隔的 API ID；不传时返回全部可展示额度 |
+| `APIIDs` | String | 否 | 逗号分隔的 API ID；参数只能出现一次；不传时返回当前已配置的可展示额度 |
 
-可查询额度项：`global_search`（全网搜）、`zhihu_search`（知乎搜索）、`hot_list`（热榜）、`user_data`（知乎用户数据）、`zhida_openai`（直答）、`knowledge`（知识库）、`tools`（小工具）。
+可查询额度项（不传 `APIIDs` 时按此顺序返回；尚未接入额度配置的 API 会被省略，不会导致整个列表失败）：
+
+| API ID | 名称 | 覆盖范围 |
+|--------|------|----------|
+| `global_search` | 全网搜 | 全网搜索 |
+| `zhihu_search` | 知乎搜索 | 知乎内容搜索 |
+| `hot_list` | 热榜 | 知乎热榜 |
+| `question_answers` | 知乎问题回答 | 获取问题下的回答摘要 |
+| `zhida_openai` | 直答 | 直答服务 |
+| `tools` | 小工具 | PDF 解析及 PPT 生成 |
+| `knowledge` | 知识库 | 知识库文件上传、知识库列表、知识库内容列表及知识库检索 |
+| `user_data` | 知乎用户数据 | 用户创作列表、关注、收藏及收藏夹数据 |
+| `creator` | 创作能力 | 个性化问题推荐、根据主题推荐问题、本人全文、评论、账号统计、单篇统计 |
+
+账号关联多个租户时，查询结果会汇总相关租户额度。
 
 #### 响应字段
 
@@ -465,9 +479,219 @@ Query：`Limit`（默认 20）。响应 Data：`Items`（FavlistItem：`UrlToken
 
 ---
 
-## 10. CLI 设计初步建议
+## 10. 问题发现
 
-### 10.1 命令分层
+### 10.1 API：`question_recommendations`（问题推荐）
+
+| 项目 | 值 |
+|------|-----|
+| URL | `GET https://developer.zhihu.com/api/v1/user/question_recommendations` |
+| 说明 | 根据当前 Access Secret 所属用户的画像，或用户指定的主题，推荐适合回答的知乎问题 |
+
+| Query 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------------|------|------|--------|------|
+| `Query` | String | 否 | — | 主题关键词。未提供时按当前用户画像推荐；提供时按主题推荐，去除首尾空白后不能为空 |
+| `Count` | Int32 | 否 | 5 | 返回数量，范围 1-20 |
+
+不传 `Query` 与传空字符串含义不同：`?Count=5` 使用画像推荐，`?Query=人工智能&Count=5` 使用主题推荐，`?Query=` 或纯空白返回 10001。两种模式均使用当前账号身份。
+
+响应 Data：`Items`（数组），元素：`Title`（String，问题标题）、`Url`（String，问题链接）。返回条目可能不足 `Count` 或为空，不支持分页。
+
+示例：
+
+```json
+{ "Code": 0, "Message": "success", "Data": { "Items": [ { "Title": "如何理解 AI Agent？", "Url": "https://www.zhihu.com/question/123" } ] } }
+```
+
+额度：与我的创作全文、评论、账号统计、单篇统计共用"创作能力"（`creator`）额度池，默认每个租户每个自然日 100 次，未实名等低额度用户为 10 次；实际额度以额度查询结果为准。日额度耗尽返回 30001。
+
+错误码：10001 参数错误、20001 鉴权或授权失败、30001 调用频率/并发限制或当日额度超过限制、30002 额外配置的累计成功次数额度耗尽、30003 请求被风控拒绝、90001 服务内部错误。
+
+### 10.2 API：`question_answers`（问题回答）
+
+| 项目 | 值 |
+|------|-----|
+| URL | `GET https://developer.zhihu.com/api/v1/content/question_answers` |
+| 说明 | 获取一个知乎问题下的回答列表。`Summary` 是服务返回的内容摘要或截取文本，不额外生成 AI 摘要，也不代表回答全文 |
+
+| Query 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------------|------|------|--------|------|
+| `QuestionUrl` | String | 是 | — | 完整的知乎问题 URL |
+| `Offset` | Int64 | 否 | 0 | 分页偏移，不能为负数 |
+| `Limit` | Int64 | 否 | 20 | 返回数量，范围 1-50 |
+
+响应 Data：`Items`（数组）、`Paging`。Item：`ContentType`（固定 `answer`）、`ContentToken`（String，回答 Token）、`Url`、`Summary`。Paging：`IsEnd`（Bool）、`NextOffset`（Int64，`IsEnd=true` 时可省略）、`Totals`（Int64，未提供时可能不返回）。
+
+```json
+{ "Code": 0, "Message": "success", "Data": { "Items": [ { "ContentType": "answer", "ContentToken": "456", "Url": "https://www.zhihu.com/question/123/answer/456", "Summary": "这是一段回答摘要……" } ], "Paging": { "IsEnd": true, "Totals": 1 } } }
+```
+
+分页说明：无效或无摘要的回答会被过滤，单页 `Items` 数量可能少于 `Limit` 甚至为空。请使用服务返回的分页字段，不按过滤后的条数重新计算：
+
+- `Paging.IsEnd=false` 时，按需将 `Paging.NextOffset` 作为下一次请求的 `Offset`。
+- `Paging.IsEnd=true` 时停止翻页。请勿根据 `Items` 数量判断结束或自行计算偏移。
+- 若 `IsEnd=false` 但缺少 `NextOffset`，停止自动翻页并报告分页信息不完整，避免重复请求。
+- `Paging.Totals` 可能包含被过滤的项，不保证等于最终可读取的摘要数。
+
+额度：使用独立的"知乎问题回答"（`question_answers`）额度池，默认每个租户每个自然日 100 次，未实名等低额度用户为 10 次。
+
+错误码：10001 问题 URL 或分页参数错误，或者问题不存在、20001、30001、30002、30003、90001（含义同 10.1）。
+
+---
+
+## 11. 创作能力
+
+通用约定：
+
+- 仅支持当前 Access Secret 所属账号的本人数据；**不接受 OAuth 身份切换**（不使用 `X-OAuth-Token`），服务端从凭证解析本人身份，不能通过参数指定他人。
+- 仅支持本人**已发布**的内容；草稿、未发布或其他不可用状态的内容不在支持范围内。
+- 本节接口与两种问题推荐共用"创作能力"（`creator`）额度池，默认每个租户每个自然日共计 100 次，未实名等低额度用户为 10 次。
+- 通用错误码：0 成功、10001 参数错误或内容不可用、20001 鉴权或授权失败、30001 调用频率/并发或当日额度超限、30002 额外配置的成功次数额度耗尽、30003 请求被风控拒绝、90001 服务内部错误。
+
+### 11.1 API：`user_content_detail`（我的创作全文）
+
+| 项目 | 值 |
+|------|-----|
+| URL | `GET https://developer.zhihu.com/api/v1/user/content_detail` |
+| 说明 | 获取当前用户自己创作内容的全文。支持回答、文章、想法和视频 |
+
+| Query 参数 | 类型 | 必填 | 说明 |
+|------------|------|------|------|
+| `ContentUrl` | String | 是 | 当前用户创作的回答、文章、想法或视频链接 |
+
+响应 Data：`ContentType`（`answer`/`article`/`pin`/`zvideo`）、`ContentToken`（String，保留字符串精度）、`Url`、`Title`（可能为空字符串）、`Body`（全文，可能包含 HTML；展示时转义或安全清洗）。
+
+- 视频类型仅返回关联正文，不提供视频文件下载。没有可用正文时返回内容不可用，不把空 `Body` 宣称为全文。
+- 支持知乎 HTTPS 链接：`/answer/{id}`、`/question/{id}/answer/{id}`、`/p/{id}`（文章）、`/pin/{id}`、`/zvideo/{id}`。
+- 链接无效、内容不存在或作者不属于当前用户时返回参数错误（10001），响应不会泄露作者归属信息。内容归属必须通过服务端验证，无法确认归属时不返回正文。全文与评论分别调用。
+
+```bash
+curl -G 'https://developer.zhihu.com/api/v1/user/content_detail' \
+  --data-urlencode 'ContentUrl=https://www.zhihu.com/question/1/answer/2' \
+  -H 'Authorization: Bearer <your_access_secret>' \
+  -H "X-Request-Timestamp: $(date +%s)"
+```
+
+### 11.2 API：`user_content_comments`（我的创作评论）
+
+| 项目 | 值 |
+|------|-----|
+| URL | `GET https://developer.zhihu.com/api/v1/user/content_comments` |
+| 说明 | 分页获取当前用户自己创作内容下的评论，返回根评论及其子评论。支持回答、文章、想法和视频 |
+
+| Query 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------------|------|------|--------|------|
+| `ContentUrl` | String | 是 | — | 当前用户创作的内容链接 |
+| `Offset` | Int64 | 否 | 0 | 分页偏移，不能为负数 |
+| `Limit` | Int64 | 否 | 20 | 根评论返回数量，范围 1-50 |
+| `Order` | String | 否 | `score` | `score` 按热度排序、`reverse` 按时间倒序、`ascending` 按时间正序 |
+
+响应 Data：`Items`（数组）、`Paging`。`Items[]` 每项含 `Comment`（根评论）及 `Children[]`（子评论），两个层级使用相同字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `ID` | Int64 | 评论 ID；客户端应保留大整数精度 |
+| `Type` | String | 评论类型 |
+| `ReplyID` | Int64，可选 | 直接回复的评论 ID，值为 0 时省略 |
+| `RootID` | Int64，可选 | 所属根评论 ID，值为 0 时省略 |
+| `CreatedAt` | Int64 | 评论创建时间，Unix 秒级时间戳 |
+| `Content` | String | 评论文本，按不可信内容处理 |
+| `LikeCount` | Int64 | 点赞数 |
+| `DislikeCount` | Int64 | 点踩数 |
+| `AuthorToken` | String | 评论作者标识 |
+
+`Children` 仅为上游附带的子评论，不保证完整。评论作者可能为他人，目标创作内容必须为当前账号本人所有。
+
+分页：`Data.Paging.IsEnd` 为 Bool；`Totals` 和 `NextOffset` 为可选 Int64。`IsEnd=false` 时使用 `NextOffset` 作为下次 `Offset`；不要按 `Items` 条数累加，也不要因短页或空页停止。未提供或不递增的 `NextOffset` 应报告分页异常并停止自动翻页。`Totals` 沿用上游计数，不保证等于可遍历的评论数量。改变目标或排序应从 `Offset=0` 开始。
+
+```json
+{ "Code": 0, "Message": "success", "Data": { "Items": [ { "Comment": { "ID": 456, "Type": "article", "CreatedAt": 1742822400, "Content": "<p>示例评论</p>", "LikeCount": 2, "DislikeCount": 0, "AuthorToken": "example-user" }, "Children": [] } ], "Paging": { "IsEnd": true } } }
+```
+
+### 11.3 API：`creator_account_stats`（账号创作数据）
+
+| 项目 | 值 |
+|------|-----|
+| URL | `GET https://developer.zhihu.com/api/v1/user/creator_account_stats` |
+| 说明 | 获取当前 Access Secret 所属创作者的账号维度数据，包括内容指标、创作数量、粉丝概览和可用的受众画像 |
+
+| Query 参数 | 类型 | 必填 | 说明 |
+|------------|------|------|------|
+| `ContentType` | String | 否 | `all`（默认）、`answer`、`article`、`pin` 或 `zvideo` |
+| `StartDate` | String | 否 | 开始日期，格式 `YYYY-MM-DD`，需与 `EndDate` 同时提供 |
+| `EndDate` | String | 否 | 结束日期，格式 `YYYY-MM-DD`，不得早于 `StartDate` |
+
+日期必须成对提供或同时省略；省略时使用服务默认统计范围，不承诺固定天数。
+
+响应 Data：`ContentType`（规范化后的内容类型）及以下可选字段（上游未提供的可选指标会省略）：
+
+| Data 字段 | 类型 | 含义 |
+|-----------|------|------|
+| `Metrics` | Object，可选 | 内容指标，见下表 |
+| `Audience` | Object，可选 | 受众画像及可选 `Status`/`Reason` |
+| `CreationCounts` | Object，可选 | `Answer`、`Article`、`Video`、`Follower` 数量（Int64） |
+| `Followers` | Object，可选 | 粉丝概览（FollowerSummary） |
+| `FollowerDetails` | Object，可选 | `Daily` 日序列、`Today` 与 `Period` 周期数据 |
+| `FollowerProfile` | Object，可选 | 画像及互动对象，需结合 `Status`/`Reason` 使用 |
+
+字段阅读说明：JSON 字段名区分大小写。可选数值指标未返回时不应补零；已提供的数值指标为 0 时会保留。状态、字符串和集合字段也可能因零值、空字符串或空集合而省略，不能仅凭缺失判断上游未提供。Int64 计数字段需保留整数精度。比例沿用上游原值，单位未明确时不要自行乘 100 或拼接百分号。指标可用范围取决于内容类型和上游覆盖，不承诺所有字段同时存在。统计可能延迟，日期范围不保证对每项指标同时生效。
+
+Metrics 字段（均可选）：`Updated`（String，统计更新时间）、`ViewCount`、`PlayCount`、`UpvoteCount`、`CommentCount`、`LikeCount`、`CollectCount`、`ShareCount`、`RepinCount`、`PublishCount`（均 Int64）、`ClickRate`、`ReadFinishedRate`、`PlayFinishedRate`（均 Float64）、`IncreasedUpvoteCount`、`DecreasedUpvoteCount`、`IncreasedLikeCount`、`DecreasedLikeCount`（Int64）、`Yesterday`/`Today`（Metrics，结构同本表）。
+
+AudienceProfileItem：`Name`（String）、`Ratio`（Float64）、`Count`（Int64，缺失时不补零）。
+
+AudienceContentItem：`ContentType`、`ContentToken`（String 保留精度）、`Title`、`FollowCount`（Int64）。
+
+Audience：`Status`（String）、`Reason`（String）、`Source`/`Activeness`/`ActiveTime`/`Gender`/`Age`/`Interest`/`Location`/`OS`（均 Array\<AudienceProfileItem\>）、`Content`（Array\<AudienceContentItem\>）。
+
+Followers（FollowerSummary）：`Total`（Int64，粉丝总数）、`Yesterday`（昨日净增）、`NewYesterday`（昨日新增）、`CancelledYesterday`（昨日取消关注）、`ActiveCount`（活跃粉丝数，Int64）、`ActiveRatio`（String，活跃粉丝占比）。
+
+FollowerDaily：`Date`（String）、`NetIncrease`、`NewCount`、`UnfollowCount`、`HomepageVisitorCount`、`HomepageFollowCount`（Int64）、`HomepageConversionRate`（Float64）。
+
+FollowerPeriod：`Date` 及 7/14/30 日三组指标：`NetIncrease{7,14,30}Days`、`NewCount{7,14,30}Days`、`UnfollowCount{7,14,30}Days`、`HomepageVisitorCount{7,14,30}Days`、`HomepageFollowCount{7,14,30}Days`（Int64）、`HomepageConversionRate{7,14,30}Days`（Float64）。
+
+FollowerDetails：`Daily`（Array\<FollowerDaily\>）、`Today`（FollowerDaily，实际统计日期以 `Date` 为准）、`Period`（FollowerPeriod）。
+
+FollowerCreatorItem：`Avatar`、`MemberToken`、`Name`（String）、`FollowCount`（Int64）。
+
+FollowerInteractions：`Status`（Int32）、`Creators`（Array\<FollowerCreatorItem\>）、`Content`（Array\<AudienceContentItem\>）。
+
+FollowerProfile：`Status`（Int32，值为 0 时省略，缺失不代表异常）、`Reason`（String）、`Audience`（Audience）、`Interactions`（FollowerInteractions）。
+
+```json
+{ "Code": 0, "Message": "success", "Data": { "ContentType": "all", "Metrics": { "Updated": "2026-09-08 12:00:00", "ViewCount": 100, "UpvoteCount": 10, "Yesterday": { "ViewCount": 20 } }, "Followers": { "Total": 50, "Yesterday": 2, "NewYesterday": 3, "CancelledYesterday": 1 } } }
+```
+
+### 11.4 API：`creator_content_stats`（单篇创作数据）
+
+| 项目 | 值 |
+|------|-----|
+| URL | `GET https://developer.zhihu.com/api/v1/user/creator_content_stats` |
+| 说明 | 获取当前用户自己创作的单篇内容数据，包括阅读、互动、转粉和可用的受众画像 |
+
+| Query 参数 | 类型 | 必填 | 说明 |
+|------------|------|------|------|
+| `ContentUrl` | String | 是 | 当前用户创作的回答、文章、想法或视频链接 |
+| `StartDate` | String | 否 | 开始日期，格式 `YYYY-MM-DD`，需与 `EndDate` 同时提供 |
+| `EndDate` | String | 否 | 结束日期，格式 `YYYY-MM-DD`，不得早于 `StartDate` |
+
+响应 Data：`Items`（数组，仅返回与已核验本人归属目标一致的数据；没有统计数据时可为空数组，不等同于各指标均为零）。Item：`ContentType`（`answer`/`article`/`pin`/`zvideo`）、`ContentToken`、`Url`、`Title`（空标题省略）、`Metrics`（可选）、`Audience`（可选）。
+
+日期规则与字段阅读说明同 11.3。
+
+Metrics 字段（均可选）：`Date`（String，统计日期）、`ViewCount`、`PlayCount`、`UpvoteCount`、`CommentCount`、`LikeCount`、`CollectCount`、`ShareCount`、`RepinCount`、`PublishCount`（Int64）、`ClickRate`、`ReadFinishedRate`、`PlayFinishedRate`（Float64）、`PageShowUV`（内容曝光用户数 UV）、`NewFollowerCount`（新增关注用户数）、`FollowerGain`（内容带来的转粉数量，Int64）、`FollowerConversionRate`（Float64，转粉率）、`PositiveInteractionRate`（String，正向互动率）、`IncreasedUpvoteCount`、`DecreasedUpvoteCount`、`IncreasedLikeCount`、`DecreasedLikeCount`、`UpvoteCount7Days`（Int64）、`Yesterday`/`Today`（Metrics，结构同本表）。
+
+Audience 结构同 11.3（`Status`/`Reason` + 各分布数组 + `Content`）。
+
+```json
+{ "Code": 0, "Message": "success", "Data": { "Items": [ { "ContentType": "article", "ContentToken": "123", "Url": "https://zhuanlan.zhihu.com/p/123", "Title": "示例文章", "Metrics": { "Date": "2026-09-08", "ViewCount": 100, "UpvoteCount": 10 } } ] } }
+```
+
+---
+
+## 12. CLI 设计初步建议
+
+### 12.1 命令分层
 
 ```text
 zhihu auth login --secret <ACCESS_SECRET>     # 保存 secret 并自动生成时间戳
@@ -492,9 +716,15 @@ zhihu user followees [--offset N] [--limit N] [--oauth-token T]
 zhihu user collections [--limit N] [--oauth-token T]
 zhihu user favlists [--limit N] [--oauth-token T]
 zhihu user favlist-contents <FAVLIST_URL_TOKEN> [--offset N] [--limit N] [--oauth-token T]
+zhihu question recommend [--query TOPIC] [--count N]
+zhihu question answers <QUESTION_URL> [--offset N] [--limit N]
+zhihu creator detail <CONTENT_URL>
+zhihu creator comments <CONTENT_URL> [--offset N] [--limit N] [--order score|reverse|ascending]
+zhihu creator account-stats [--type all|answer|article|pin|zvideo] [--start-date YYYY-MM-DD --end-date YYYY-MM-DD]
+zhihu creator content-stats <CONTENT_URL> [--start-date YYYY-MM-DD --end-date YYYY-MM-DD]
 ```
 
-### 10.2 需要提前确认的设计点
+### 12.2 需要提前确认的设计点
 
 1. **鉴权配置存储**：Access Secret 是写入本地配置文件（如 `~/.zhihu-cli/config.toml`），还是每次通过环境变量 `ZHIHU_ACCESS_SECRET` 传入？
 2. **输出格式**：默认输出可读表格，还是 JSON？是否提供 `--json` / `--table` 开关？
@@ -502,7 +732,7 @@ zhihu user favlist-contents <FAVLIST_URL_TOKEN> [--offset N] [--limit N] [--oaut
 4. **流式输出**：`zhida` 流式响应如何与终端交互（是否逐字打印、是否支持 `--no-stream` 聚合）？
 5. **Skill 包支持**：CLI 是否只需调用 HTTP API，还是也要能下载 / 执行本地 Skill zip？
 
-### 10.3 实现注意事项
+### 12.3 实现注意事项
 
 - 每个请求必须带 `X-Request-Timestamp`，建议用当前 Unix 秒级时间戳自动生成。
 - `global_search` 的 `Filter` 需要 URL 编码，CLI 应提供参数封装避免用户手写表达式。

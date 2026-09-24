@@ -4,11 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-`zhihu-cli` is a Rust command-line tool for the Zhihu Open Platform API. It exposes three command groups:
+`zhihu-cli` is a Rust command-line tool for the Zhihu Open Platform API. It exposes these command groups:
 
 - `zhihu auth {login,set-secret,status}` — credential management
 - `zhihu search {zhihu,global}` — Zhihu/site-wide and global web search
 - `zhihu ask` — Zhida chat/completion API (fast/thinking/agent models)
+- `zhihu hot` — Zhihu hot list
+- `zhihu quota` — daily free quota usage
+- `zhihu kb {list,items,upload,search}` — knowledge bases (list/contents/file upload/RAG search)
+- `zhihu pdf {upload,task,status,parse}` — PDF parsing (async tasks; `parse` is the one-shot)
+- `zhihu ppt {task,status,generate}` — PPT generation from Zhihu answers/articles (async tasks; `generate` is the one-shot)
+- `zhihu user {contents,followees,collections,favlists,favlist-contents}` — Zhihu user data
+- `zhihu question {recommend,answers}` — question discovery (recommended questions to answer / answers of a question)
+- `zhihu creator {detail,comments,account-stats,content-stats}` — creator capabilities (own content full text, comments, account & per-content stats)
 
 The binary name is `zhihu`. The crate is `zhihu-cli`.
 
@@ -47,8 +55,8 @@ Then use `./scripts/coverage.sh summary|html|text|lcov`.
 
 ### Entry and dispatch
 
-- `src/main.rs` is a thin `tokio::main` wrapper: parse `Cli`, dispatch to `commands::{ask,auth,search}::run`.
-- `src/cli.rs` defines the clap-derived command tree, argument defaults, and value enums (`ModelTier`, `SearchDb`). It also contains CLI-parsing unit tests.
+- `src/main.rs` is a thin `tokio::main` wrapper: parse `Cli`, dispatch to `commands::{ask,auth,creator,hot,knowledge,pdf,ppt,question,quota,search,user}::run`.
+- `src/cli.rs` defines the clap-derived command tree, argument defaults, and value enums (`ModelTier`, `SearchDb`, `UserContentType`, `SortField`, `SortOrder`, `KbScope`, `RecallScope`, `CreatorContentType`, `CommentOrder`). It also contains CLI-parsing unit tests.
 
 ### Commands
 
@@ -63,17 +71,21 @@ Examples:
 - `commands/search.rs`: `build_request` returns `(path, query_params)`; `handle_with_client(&SearchCommand, &ZhihuClient)` is injected with a mock client in tests.
 - `commands/ask.rs`: `build_ask_body` assembles the OpenAI-style request body; `stream_ask_with_client` handles SSE parsing via the nested `sse_parser` module.
 - `commands/auth.rs`: `handle(cmd, &mut impl BufRead)` accepts a reader so tests can pass `&[u8]` while production passes `io::stdin().lock()`.
+- `commands/knowledge.rs`: `build_list_request`/`build_items_request`/`build_search_body`/`build_upload_form` cover the four subcommands, including the "at least one `--kb-id` or `--scope`" validation for search.
+- `commands/pdf.rs` / `commands/ppt.rs`: async-task commands. The one-shot `parse`/`generate` chain upload → create task → poll via the shared `commands/task_poll.rs` helper (`is_terminal`, `wait_for_task`) and fail with `ZhihuError::TaskTimeout` when `--timeout-secs` elapses.
+- `commands/question.rs` / `commands/creator.rs`: question discovery and creator-capability commands; same `build_request` + `handle_with_client` pattern as `hot.rs`/`quota.rs`. Creator commands validate the paired `--start-date`/`--end-date` client-side.
 
 ### HTTP and auth
 
 - `src/client.rs` wraps `reqwest`. `ZhihuClient::new()` resolves the secret via `Config::resolve_secret()`. `with_secret_and_base_url` is the test constructor.
 - Auth headers are injected centrally: `Authorization: Bearer <secret>` and `X-Request-Timestamp` (Unix seconds).
+- Client methods: `get`, `post` (JSON), `post_multipart` (file uploads), `get_with_oauth` (adds the optional `X-OAuth-Token` header for user-data APIs), plus the raw `request()` + `send_json()` escape hatch used for one-off headers such as `Idempotency-Key`.
 - Base URL defaults to `https://developer.zhihu.com`; override with `ZHIHU_OPENAPI_BASE_URL`.
 
 ### Config and errors
 
 - `src/config.rs` stores the access secret in `~/.zhihu-cli/config.toml`. `resolve_secret` prefers `ZHIHU_ACCESS_SECRET` env var over the file.
-- `src/error.rs` defines `ZhihuError` with `thiserror`. `ZhihuError::MissingSecret` renders with code `20001`; other variants omit the `code` field.
+- `src/error.rs` defines `ZhihuError` with `thiserror`. `ZhihuError::MissingSecret` renders with code `20001`; other variants (including `TaskTimeout`) omit the `code` field.
 - `src/output.rs` pretty-prints success JSON and serializes errors to single-line JSON on stderr before exiting.
 
 ### Tests
@@ -110,9 +122,15 @@ When adding or changing commands, prefer these patterns that keep the code testa
 
 - The config file path is `~/.zhihu-cli/config.toml`, not `~/.config/zhihu-cli/config.toml` (the README mentions the latter but the code uses the former).
 - `ZHIHU_ACCESS_SECRET` always takes precedence over the config file.
-- `zhihu search zhihu` clamps `--count` to `[1, 10]`; `zhihu search global` clamps to `[1, 20]`.
+- `zhihu search zhihu` clamps `--count` to `[1, 10]`; `zhihu search global` clamps to `[1, 20]`; `zhihu hot` clamps `--limit` to `[1, 30]`.
 - `host=="zhihu.com"` is not supported in global search; use `zhihu search zhihu` for Zhihu-only content.
 - Default ask model is `thinking` (`zhida-thinking-1p5`); alternatives are `fast` and `agent`.
+- Several APIs share daily quota pools: `knowledge` (knowledge bases), `tools` (PDF/PPT), `creator` (question recommendations + creator APIs), `question_answers` (question answers); check them with `zhihu quota --ids knowledge,tools,creator,question_answers`. The quota query itself does not consume quota.
+- `zhihu kb items` clamps `--limit` to `[1, 20]`; `zhihu kb search` clamps to `[1, 10]` and requires at least one `--kb-id` or `--scope`; `zhihu user contents|followees` clamp `--limit` to `[1, 50]`; `zhihu ppt task|generate` clamp `--pages` to `[6, 21]`.
+- `zhihu question recommend` clamps `--count` to `[1, 20]` (omit `--query` for profile-based recommendations); `zhihu question answers` and `zhihu creator comments` clamp `--limit` to `[1, 50]`.
+- Creator commands only access the caller's own data — no `--oauth-token`. `--start-date`/`--end-date` must be given together as `YYYY-MM-DD` (validated client-side).
+- User-data APIs default to the caller's own data; pass `--oauth-token` to query a Zhihu-OAuth-authorized user instead (adds the `X-OAuth-Token` header).
+- PDF/PPT tasks are asynchronous: `pdf parse`/`ppt generate` poll every 2s until `task_status` is `succeeded`/`failed` or `--timeout-secs` (default 600) elapses (then `TaskTimeout`). Task creation accepts an optional `--idempotency-key`.
 
 ## Release
 

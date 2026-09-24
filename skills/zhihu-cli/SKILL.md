@@ -1,6 +1,6 @@
 ---
 name: zhihu-cli
-description: Use this skill whenever the user wants to interact with the Zhihu Open Platform through the `zhihu` command-line tool. This includes searching Zhihu content, performing global web search via Zhihu, using the Zhida chat/completion API, checking the Zhihu hot list, querying API quota, listing/searching/uploading-to knowledge bases, RAG search over knowledge bases, parsing PDF files, generating PPTs from Zhihu answers/articles, fetching Zhihu user data (contents, followees, collections, favlists), configuring credentials, or understanding CLI output. Use it even if the user only says "zhihu", "search zhihu", "zhida", "知乎", "热榜", "hot list", "额度", "quota", "知识库", "knowledge base", "RAG", "PDF 解析", "PPT 生成", "收藏夹", "favlist", or mentions the project `zhihu-cli`.
+description: Use this skill whenever the user wants to interact with the Zhihu Open Platform through the `zhihu` command-line tool. This includes searching Zhihu content, performing global web search via Zhihu, using the Zhida chat/completion API, checking the Zhihu hot list, querying API quota, listing/searching/uploading-to knowledge bases, RAG search over knowledge bases, parsing PDF files, generating PPTs from Zhihu answers/articles, fetching Zhihu user data (contents, followees, collections, favlists), discovering questions to answer and reading answer summaries, viewing your own content's full text, comments, and creator stats, configuring credentials, or understanding CLI output. Use it even if the user only says "zhihu", "search zhihu", "zhida", "知乎", "热榜", "hot list", "额度", "quota", "知识库", "knowledge base", "RAG", "PDF 解析", "PPT 生成", "收藏夹", "favlist", "问题推荐", "创作数据", "creator stats", or mentions the project `zhihu-cli`.
 ---
 
 # zhihu-cli Skill
@@ -171,7 +171,7 @@ zhihu quota [--ids ID[,ID...]]
 
 - `--ids`: comma-separated API IDs to filter; omit for all
 
-Known IDs: `global_search`, `zhihu_search`, `hot_list`, `user_data`, `zhida_openai`, `knowledge`, `tools`. Knowledge-base APIs share the `knowledge` pool; PDF parse and PPT generation share the `tools` pool. The quota query itself consumes no quota.
+Known IDs: `global_search`, `zhihu_search`, `hot_list`, `question_answers`, `user_data`, `zhida_openai`, `knowledge`, `tools`, `creator`. Knowledge-base APIs share the `knowledge` pool; PDF parse and PPT generation share the `tools` pool; question recommendations and creator APIs share the `creator` pool; question answers use the `question_answers` pool. The quota query itself consumes no quota.
 
 Example:
 
@@ -259,6 +259,47 @@ Examples:
 zhihu user contents --type answer --limit 10 --sort-field like_count
 zhihu user favlists --limit 5
 zhihu user favlist-contents 123456789 --limit 20
+```
+
+### Question discovery (问题发现)
+
+```bash
+zhihu question recommend [--query TOPIC] [--count N]
+zhihu question answers <QUESTION_URL> [--offset N] [--limit N]
+```
+
+- `question recommend`: recommends questions worth answering. Omit `--query` for profile-based recommendations; pass `--query TOPIC` for topic-based (a blank value is rejected). `--count` default 5, clamped to [1, 20]. No pagination
+- `question answers`: answer summaries under a question (`Summary` is the service-provided excerpt, not an AI summary or the full text). `--limit` default 20, clamped to [1, 50]; page with `Paging.NextOffset` as the next `--offset`, stop when `Paging.IsEnd` is true
+
+Examples:
+
+```bash
+zhihu question recommend --query "AI Agent" --count 10
+zhihu question answers "https://www.zhihu.com/question/123456789" --limit 20
+```
+
+### Creator capabilities (创作能力)
+
+```bash
+zhihu creator detail <CONTENT_URL>
+zhihu creator comments <CONTENT_URL> [--offset N] [--limit N] [--order score|reverse|ascending]
+zhihu creator account-stats [--type all|answer|article|pin|zvideo] [--start-date YYYY-MM-DD --end-date YYYY-MM-DD]
+zhihu creator content-stats <CONTENT_URL> [--start-date YYYY-MM-DD --end-date YYYY-MM-DD]
+```
+
+- All creator commands read only the current Access Secret account's own data; they do not accept `--oauth-token`
+- `creator detail`: full text (`Body`, may contain HTML) of your own published answer/article/pin/zvideo; drafts and unpublished content are not supported
+- `creator comments`: root comments plus their child comments; `--limit` default 20, clamped to [1, 50], counts root comments; `--order`: `score` (default, by popularity), `reverse` (newest first), `ascending` (oldest first)
+- `account-stats` / `content-stats`: `--start-date`/`--end-date` must be given together (YYYY-MM-DD, end not before start); omit both for the service default range. Optional metrics are omitted by the API rather than zero-filled
+- Creator commands share the daily `creator` quota pool with `question recommend`
+
+Examples:
+
+```bash
+zhihu creator detail "https://zhuanlan.zhihu.com/p/123456789"
+zhihu creator comments "https://www.zhihu.com/question/123/answer/456" --order reverse --limit 10
+zhihu creator account-stats --type article --start-date 2026-09-01 --end-date 2026-09-24
+zhihu creator content-stats "https://zhuanlan.zhihu.com/p/123456789"
 ```
 
 ## Output format
@@ -351,7 +392,8 @@ Common error codes:
 | 10001 | Bad request parameters |
 | 20001 | Authentication failed (CLI-local missing-secret sentinel is also 20001) |
 | 30001 | Rate limited |
-| 30002 | Quota exhausted (user-data / pdf / ppt APIs) |
+| 30002 | Quota exhausted (user-data / pdf / ppt / question / creator APIs) |
+| 30003 | Request rejected by risk control (question / creator APIs) |
 | 40001 | Idempotency key conflicts with different params (pdf/ppt) |
 | 40002 | Uploaded file missing, expired, or inaccessible (pdf) |
 | 40003 | Too many active tasks; wait for existing tasks (pdf/ppt) |
@@ -377,6 +419,8 @@ Task commands (`pdf parse` / `ppt generate`) may also fail with a `TaskTimeout` 
 10. For PDF/PPT one-shots, prefer `zhihu pdf parse <FILE>` / `zhihu ppt generate <URL> --pages N` over manually chaining upload/task/status. Download links expire quickly; if a link is stale, re-run the matching `status` command to get a fresh one.
 11. For `kb search`, at least one `--kb-id` or `--scope` is required; `--scope personal` covers your own (including default) knowledge bases.
 12. User-data commands return your own data by default; only pass `--oauth-token` when you hold that user's OAuth token.
+13. Use `zhihu question recommend` (optionally with `--query TOPIC`) when the user looks for questions worth answering; follow up with `zhihu question answers <QUESTION_URL>` to read answer summaries.
+14. Creator commands (`zhihu creator ...`) only read the current account's own data — no `--oauth-token`; dates must be passed as a `--start-date`/`--end-date` pair. Check the `creator` pool with `zhihu quota --ids creator` before heavy use.
 
 ## Examples
 
@@ -422,6 +466,21 @@ Generate a PPT from an answer and grab the link:
 
 ```bash
 zhihu ppt generate "https://www.zhihu.com/question/1892249263213356127/answer/2021688002292752412" --pages 10
+```
+
+Find questions to answer, then read the answers under one of them:
+
+```bash
+zhihu question recommend --query "AI Agent" --count 5
+zhihu question answers "https://www.zhihu.com/question/123456789" --limit 10
+```
+
+Read your own article's full text, comments, and stats:
+
+```bash
+zhihu creator detail "https://zhuanlan.zhihu.com/p/123456789"
+zhihu creator comments "https://zhuanlan.zhihu.com/p/123456789" --limit 10
+zhihu creator content-stats "https://zhuanlan.zhihu.com/p/123456789" --start-date 2026-09-01 --end-date 2026-09-24
 ```
 
 ## References

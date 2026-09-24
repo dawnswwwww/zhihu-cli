@@ -96,6 +96,46 @@
           "text": "The response mentions the --limit flag and its default/max behavior"
         }
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "我想找几个适合回答的、关于 AI Agent 主题的知乎问题，要 5 个。应该用什么命令？",
+      "expected_output": "应该给出 `zhihu question recommend --query \"AI Agent\" --count 5` 命令，并说明不传 --query 时按当前用户画像推荐，输出是 PascalCase 字段的 JSON（Code, Message, Data.Items，Items 含 Title、Url），不支持分页。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "correct_command",
+          "text": "The response includes the exact command `zhihu question recommend --query \"AI Agent\" --count 5`"
+        },
+        {
+          "name": "mentions_json_output",
+          "text": "The response states that the output is JSON"
+        },
+        {
+          "name": "mentions_profile_mode",
+          "text": "The response mentions that omitting --query gives profile-based recommendations"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "我想读取我自己在知乎专栏发布的某篇文章的全文，再看下这篇文章的评论，分别用什么命令？",
+      "expected_output": "应该给出 `zhihu creator detail \"https://zhuanlan.zhihu.com/p/<id>\"` 获取全文（Data.Body），以及 `zhihu creator comments \"https://zhuanlan.zhihu.com/p/<id>\"` 获取评论；并说明这些命令只读取当前 Access Secret 所属账号本人的数据、不支持 --oauth-token。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "correct_detail_command",
+          "text": "The response includes `zhihu creator detail` followed by the article URL"
+        },
+        {
+          "name": "correct_comments_command",
+          "text": "The response includes `zhihu creator comments`"
+        },
+        {
+          "name": "mentions_own_data_only",
+          "text": "The response states that creator commands only access the current account's own data"
+        }
+      ]
     }
   ]
 }

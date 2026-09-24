@@ -2,7 +2,7 @@
 
 CLI for the [Zhihu Open Platform API](https://developer.zhihu.com).
 
-Supports authentication, Zhihu search, global web search, the Zhida chat completion API, the hot list, quota queries, knowledge bases (list/items/upload/RAG search), PDF parsing, PPT generation, and Zhihu user data (contents/followees/collections/favlists).
+Supports authentication, Zhihu search, global web search, the Zhida chat completion API, the hot list, quota queries, knowledge bases (list/items/upload/RAG search), PDF parsing, PPT generation, Zhihu user data (contents/followees/collections/favlists), question discovery (recommendations/answers), and creator capabilities (own content full text, comments, account & per-content stats).
 
 ## Installation
 
@@ -107,6 +107,12 @@ Once installed, Claude will automatically use the skill whenever you ask about s
 | `zhihu user favlists` | Your favlists. |
 | `zhihu user favlist-contents <TOKEN>` | Contents of a favlist (token from `user favlists`). |
 | `zhihu user <cmd> --oauth-token <T>` | Query an OAuth-authorized user's data instead of your own. |
+| `zhihu question recommend` | Recommend questions to answer. `--query <TOPIC>` for topic-based (omit for profile-based), `--count` (max 20). |
+| `zhihu question answers <QUESTION_URL>` | Answers under a question. `--offset`/`--limit` (max 50). |
+| `zhihu creator detail <CONTENT_URL>` | Full text of your own answer/article/pin/zvideo. |
+| `zhihu creator comments <CONTENT_URL>` | Comments on your own content. `--offset`/`--limit` (max 50), `--order score/reverse/ascending`. |
+| `zhihu creator account-stats` | Account-level creator stats. `--type`, paired `--start-date`/`--end-date` (YYYY-MM-DD). |
+| `zhihu creator content-stats <CONTENT_URL>` | Per-content stats. Paired `--start-date`/`--end-date` (YYYY-MM-DD). |
 
 Run `zhihu --help` or `zhihu <command> --help` for details.
 

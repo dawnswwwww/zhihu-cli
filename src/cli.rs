@@ -45,6 +45,16 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PptCommand,
     },
+    /// Zhihu question commands (recommendations, answers)
+    Question {
+        #[command(subcommand)]
+        subcommand: QuestionCommand,
+    },
+    /// Creator data commands (detail, comments, account/content stats)
+    Creator {
+        #[command(subcommand)]
+        subcommand: CreatorCommand,
+    },
 }
 
 #[derive(Debug, clap::Args)]
@@ -270,6 +280,116 @@ impl SortOrder {
         match self {
             SortOrder::Desc => "desc",
             SortOrder::Asc => "asc",
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum QuestionCommand {
+    /// Recommend questions (profile-based, or filtered by topic keywords)
+    Recommend {
+        /// Topic keywords; omit for profile-based recommendations
+        #[arg(long)]
+        query: Option<String>,
+        /// Number of recommendations (API max 20)
+        #[arg(long, default_value = "5")]
+        count: i32,
+    },
+    /// List the answers to a question
+    Answers {
+        /// Full Zhihu question URL
+        question_url: String,
+        /// Pagination offset
+        #[arg(long, default_value = "0")]
+        offset: i64,
+        /// Number of results (API max 50)
+        #[arg(long, default_value = "20")]
+        limit: i64,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CreatorCommand {
+    /// Get the full content of one of your creations
+    Detail {
+        /// URL of your own answer/article/pin/zvideo
+        content_url: String,
+    },
+    /// List the comments on one of your creations
+    Comments {
+        /// URL of your own answer/article/pin/zvideo
+        content_url: String,
+        /// Pagination offset
+        #[arg(long, default_value = "0")]
+        offset: i64,
+        /// Number of results (API max 50)
+        #[arg(long, default_value = "20")]
+        limit: i64,
+        /// Comment sort order
+        #[arg(long, value_enum, default_value = "score")]
+        order: CommentOrder,
+    },
+    /// Account-level creator stats
+    AccountStats {
+        /// Content type filter
+        #[arg(long = "type", value_enum, default_value = "all")]
+        content_type: CreatorContentType,
+        /// Start date (YYYY-MM-DD); must be given together with --end-date
+        #[arg(long)]
+        start_date: Option<String>,
+        /// End date (YYYY-MM-DD); must be given together with --start-date
+        #[arg(long)]
+        end_date: Option<String>,
+    },
+    /// Per-content creator stats
+    ContentStats {
+        /// URL of your own answer/article/pin/zvideo
+        content_url: String,
+        /// Start date (YYYY-MM-DD); must be given together with --end-date
+        #[arg(long)]
+        start_date: Option<String>,
+        /// End date (YYYY-MM-DD); must be given together with --start-date
+        #[arg(long)]
+        end_date: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Default, clap::ValueEnum)]
+pub enum CreatorContentType {
+    #[default]
+    All,
+    Answer,
+    Article,
+    Pin,
+    Zvideo,
+}
+
+impl CreatorContentType {
+    pub fn api_name(&self) -> &'static str {
+        match self {
+            CreatorContentType::All => "all",
+            CreatorContentType::Answer => "answer",
+            CreatorContentType::Article => "article",
+            CreatorContentType::Pin => "pin",
+            CreatorContentType::Zvideo => "zvideo",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, clap::ValueEnum)]
+pub enum CommentOrder {
+    #[default]
+    Score,
+    Reverse,
+    Ascending,
+}
+
+impl CommentOrder {
+    pub fn api_name(&self) -> &'static str {
+        match self {
+            CommentOrder::Score => "score",
+            CommentOrder::Reverse => "reverse",
+            CommentOrder::Ascending => "ascending",
         }
     }
 }
@@ -814,5 +934,163 @@ mod tests {
             }
             _ => panic!("expected ppt generate"),
         }
+    }
+
+    #[test]
+    fn parse_question_recommend_defaults() {
+        let cli = Cli::parse_from(["zhihu", "question", "recommend"]);
+        match cli.command {
+            Command::Question { subcommand: QuestionCommand::Recommend { query, count } } => {
+                assert!(query.is_none());
+                assert_eq!(count, 5);
+            }
+            _ => panic!("expected question recommend"),
+        }
+    }
+
+    #[test]
+    fn parse_question_recommend_with_query_and_count() {
+        let cli = Cli::parse_from([
+            "zhihu", "question", "recommend", "--query", "rust", "--count", "10",
+        ]);
+        match cli.command {
+            Command::Question { subcommand: QuestionCommand::Recommend { query, count } } => {
+                assert_eq!(query.as_deref(), Some("rust"));
+                assert_eq!(count, 10);
+            }
+            _ => panic!("expected question recommend"),
+        }
+    }
+
+    #[test]
+    fn parse_question_answers_defaults() {
+        let cli = Cli::parse_from(["zhihu", "question", "answers", "https://www.zhihu.com/question/1"]);
+        match cli.command {
+            Command::Question { subcommand: QuestionCommand::Answers { question_url, offset, limit } } => {
+                assert_eq!(question_url, "https://www.zhihu.com/question/1");
+                assert_eq!(offset, 0);
+                assert_eq!(limit, 20);
+            }
+            _ => panic!("expected question answers"),
+        }
+    }
+
+    #[test]
+    fn parse_question_answers_with_offset_and_limit() {
+        let cli = Cli::parse_from([
+            "zhihu", "question", "answers", "https://www.zhihu.com/question/1",
+            "--offset", "40", "--limit", "50",
+        ]);
+        match cli.command {
+            Command::Question { subcommand: QuestionCommand::Answers { question_url, offset, limit } } => {
+                assert_eq!(question_url, "https://www.zhihu.com/question/1");
+                assert_eq!(offset, 40);
+                assert_eq!(limit, 50);
+            }
+            _ => panic!("expected question answers"),
+        }
+    }
+
+    #[test]
+    fn parse_creator_detail_takes_content_url() {
+        let cli = Cli::parse_from(["zhihu", "creator", "detail", "https://www.zhihu.com/answer/1"]);
+        match cli.command {
+            Command::Creator { subcommand: CreatorCommand::Detail { content_url } } => {
+                assert_eq!(content_url, "https://www.zhihu.com/answer/1");
+            }
+            _ => panic!("expected creator detail"),
+        }
+    }
+
+    #[test]
+    fn parse_creator_comments_defaults() {
+        let cli = Cli::parse_from(["zhihu", "creator", "comments", "https://www.zhihu.com/answer/1"]);
+        match cli.command {
+            Command::Creator { subcommand: CreatorCommand::Comments { content_url, offset, limit, order } } => {
+                assert_eq!(content_url, "https://www.zhihu.com/answer/1");
+                assert_eq!(offset, 0);
+                assert_eq!(limit, 20);
+                assert!(matches!(order, CommentOrder::Score));
+            }
+            _ => panic!("expected creator comments"),
+        }
+    }
+
+    #[test]
+    fn parse_creator_comments_with_all_options() {
+        let cli = Cli::parse_from([
+            "zhihu", "creator", "comments", "https://www.zhihu.com/answer/1",
+            "--offset", "10", "--limit", "30", "--order", "ascending",
+        ]);
+        match cli.command {
+            Command::Creator { subcommand: CreatorCommand::Comments { content_url, offset, limit, order } } => {
+                assert_eq!(content_url, "https://www.zhihu.com/answer/1");
+                assert_eq!(offset, 10);
+                assert_eq!(limit, 30);
+                assert!(matches!(order, CommentOrder::Ascending));
+            }
+            _ => panic!("expected creator comments"),
+        }
+    }
+
+    #[test]
+    fn parse_creator_account_stats_defaults() {
+        let cli = Cli::parse_from(["zhihu", "creator", "account-stats"]);
+        match cli.command {
+            Command::Creator { subcommand: CreatorCommand::AccountStats { content_type, start_date, end_date } } => {
+                assert!(matches!(content_type, CreatorContentType::All));
+                assert!(start_date.is_none());
+                assert!(end_date.is_none());
+            }
+            _ => panic!("expected creator account-stats"),
+        }
+    }
+
+    #[test]
+    fn parse_creator_account_stats_with_type_and_dates() {
+        let cli = Cli::parse_from([
+            "zhihu", "creator", "account-stats",
+            "--type", "zvideo", "--start-date", "2026-01-01", "--end-date", "2026-01-31",
+        ]);
+        match cli.command {
+            Command::Creator { subcommand: CreatorCommand::AccountStats { content_type, start_date, end_date } } => {
+                assert!(matches!(content_type, CreatorContentType::Zvideo));
+                assert_eq!(start_date.as_deref(), Some("2026-01-01"));
+                assert_eq!(end_date.as_deref(), Some("2026-01-31"));
+            }
+            _ => panic!("expected creator account-stats"),
+        }
+    }
+
+    #[test]
+    fn parse_creator_content_stats_with_dates() {
+        let cli = Cli::parse_from([
+            "zhihu", "creator", "content-stats", "https://zhuanlan.zhihu.com/p/1",
+            "--start-date", "2026-02-01", "--end-date", "2026-02-28",
+        ]);
+        match cli.command {
+            Command::Creator { subcommand: CreatorCommand::ContentStats { content_url, start_date, end_date } } => {
+                assert_eq!(content_url, "https://zhuanlan.zhihu.com/p/1");
+                assert_eq!(start_date.as_deref(), Some("2026-02-01"));
+                assert_eq!(end_date.as_deref(), Some("2026-02-28"));
+            }
+            _ => panic!("expected creator content-stats"),
+        }
+    }
+
+    #[test]
+    fn creator_content_type_api_names() {
+        assert_eq!(CreatorContentType::All.api_name(), "all");
+        assert_eq!(CreatorContentType::Answer.api_name(), "answer");
+        assert_eq!(CreatorContentType::Article.api_name(), "article");
+        assert_eq!(CreatorContentType::Pin.api_name(), "pin");
+        assert_eq!(CreatorContentType::Zvideo.api_name(), "zvideo");
+    }
+
+    #[test]
+    fn comment_order_api_names() {
+        assert_eq!(CommentOrder::Score.api_name(), "score");
+        assert_eq!(CommentOrder::Reverse.api_name(), "reverse");
+        assert_eq!(CommentOrder::Ascending.api_name(), "ascending");
     }
 }

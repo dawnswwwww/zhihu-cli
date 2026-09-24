@@ -14,5 +14,7 @@ async fn main() {
         Command::Kb { subcommand } => zhihu_cli::commands::knowledge::run(subcommand).await,
         Command::Pdf { subcommand } => zhihu_cli::commands::pdf::run(subcommand).await,
         Command::Ppt { subcommand } => zhihu_cli::commands::ppt::run(subcommand).await,
+        Command::Question { subcommand } => zhihu_cli::commands::question::run(subcommand).await,
+        Command::Creator { subcommand } => zhihu_cli::commands::creator::run(subcommand).await,
     }
 }

@@ -31,7 +31,9 @@ fn help_shows_commands() {
         .stdout(predicate::str::contains("user"))
         .stdout(predicate::str::contains("kb"))
         .stdout(predicate::str::contains("pdf"))
-        .stdout(predicate::str::contains("ppt"));
+        .stdout(predicate::str::contains("ppt"))
+        .stdout(predicate::str::contains("question"))
+        .stdout(predicate::str::contains("creator"));
 }
 
 #[test]
@@ -485,4 +487,186 @@ async fn cli_ppt_generate_against_mock_server_succeeds() {
         .success()
         .stdout(predicate::str::contains("\"task_status\": \"succeeded\""))
         .stdout(predicate::str::contains("deck.pptx"));
+}
+
+#[test]
+fn question_recommend_without_auth_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env_remove("ZHIHU_ACCESS_SECRET");
+        cmd.arg("question").arg("recommend");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("\"code\":20001"))
+            .stderr(predicate::str::contains("Missing access secret"));
+    });
+}
+
+#[test]
+fn question_answers_without_auth_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env_remove("ZHIHU_ACCESS_SECRET");
+        cmd.arg("question")
+            .arg("answers")
+            .arg("https://www.zhihu.com/question/19550225");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("\"code\":20001"))
+            .stderr(predicate::str::contains("Missing access secret"));
+    });
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_question_recommend_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/user/question_recommendations"))
+        .and(query_param("Query", "rust"))
+        .and(query_param("Count", "3"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0,
+            "Message": "ok",
+            "Data": { "Items": [] },
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("question")
+        .arg("recommend")
+        .arg("--query")
+        .arg("rust")
+        .arg("--count")
+        .arg("3");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"Code\": 0"));
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_question_answers_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/content/question_answers"))
+        .and(query_param("QuestionUrl", "https://www.zhihu.com/question/19550225"))
+        .and(query_param("Offset", "0"))
+        .and(query_param("Limit", "10"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0,
+            "Message": "ok",
+            "Data": { "Items": [], "Paging": { "IsEnd": true, "Totals": 0 } },
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("question")
+        .arg("answers")
+        .arg("https://www.zhihu.com/question/19550225")
+        .arg("--limit")
+        .arg("10");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"Code\": 0"));
+}
+
+#[test]
+fn creator_detail_without_auth_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env_remove("ZHIHU_ACCESS_SECRET");
+        cmd.arg("creator")
+            .arg("detail")
+            .arg("https://www.zhihu.com/answer/123");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("\"code\":20001"))
+            .stderr(predicate::str::contains("Missing access secret"));
+    });
+}
+
+#[test]
+fn creator_account_stats_solo_start_date_fails() {
+    with_temp_home(|tmp| {
+        let mut cmd = Command::cargo_bin("zhihu").unwrap();
+        cmd.env("HOME", tmp.path());
+        cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+        cmd.arg("creator")
+            .arg("account-stats")
+            .arg("--start-date")
+            .arg("2026-01-01");
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("Invalid argument"))
+            .stderr(predicate::str::contains("must be provided together"));
+    });
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_creator_detail_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/user/content_detail"))
+        .and(query_param("ContentUrl", "https://www.zhihu.com/answer/123"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0,
+            "Message": "ok",
+            "Data": { "Content": "" },
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("creator")
+        .arg("detail")
+        .arg("https://www.zhihu.com/answer/123");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"Code\": 0"));
+}
+
+#[tokio::test]
+#[serial]
+async fn cli_creator_account_stats_against_mock_server_succeeds() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/user/creator_account_stats"))
+        .and(query_param("ContentType", "answer"))
+        .and(query_param("StartDate", "2026-01-01"))
+        .and(query_param("EndDate", "2026-01-31"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "Code": 0,
+            "Message": "ok",
+            "Data": {},
+        })))
+        .mount(&server)
+        .await;
+
+    let mut cmd = Command::cargo_bin("zhihu").unwrap();
+    cmd.env("ZHIHU_ACCESS_SECRET", "fake");
+    cmd.env("ZHIHU_OPENAPI_BASE_URL", server.uri());
+    cmd.arg("creator")
+        .arg("account-stats")
+        .arg("--type")
+        .arg("answer")
+        .arg("--start-date")
+        .arg("2026-01-01")
+        .arg("--end-date")
+        .arg("2026-01-31");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"Code\": 0"));
 }
